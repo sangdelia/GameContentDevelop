@@ -16,6 +16,9 @@
 - `docs/MVP.md`: 최소 구현 범위 정의
 - `docs/TASKS.md`: 2주 작업 계획
 - `docs/ASSET_PLAN.md`: 에셋 및 LLM 활용 계획
+- `docs/TECH_STACK.md`: Unity 및 멀티플레이 기술 선택 기준
+- `docs/START_CHECKLIST.md`: 개발 시작 체크리스트
+- `docs/IMPLEMENTATION_ORDER.md`: 실제 구현 순서
 
 ## Development Direction
 
