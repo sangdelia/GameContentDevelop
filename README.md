@@ -30,6 +30,12 @@
 - `docs/NETWORK_SPEC.md`: Photon Fusion 기준 네트워크 명세
 - `docs/GAME_FLOW_SPEC.md`: 라운드 진행 및 상태 전이 명세
 - `docs/TEST_PLAN.md`: 기능별 테스트 계획
+- `docs/INTERFACE_SPEC.md`: 인터페이스 및 메서드 시그니처 규격
+- `docs/ENUM_SPEC.md`: enum 및 상태값 규격
+- `docs/DATA_MODEL_SPEC.md`: ScriptableObject 및 런타임 데이터 규격
+- `docs/EVENT_CONVENTIONS.md`: 이벤트 및 신호 이름 규칙
+- `docs/CODING_CONVENTIONS.md`: C# 코딩 규칙
+- `docs/OWNERSHIP_MATRIX.md`: 파일 및 시스템 소유 범위
 
 ## Development Direction
 
