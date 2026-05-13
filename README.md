@@ -25,6 +25,11 @@
 - `docs/COLLABORATION_GUIDE.md`: 팀 협업 규칙
 - `docs/GIT_WORKFLOW.md`: 브랜치 및 병합 규칙
 - `docs/FOLDER_CONVENTIONS.md`: 폴더 구조 및 네이밍 규칙
+- `docs/SCRIPT_ARCHITECTURE.md`: 스크립트 책임 분리 명세
+- `docs/SCENE_STRUCTURE.md`: 씬 구성 및 오브젝트 배치 명세
+- `docs/NETWORK_SPEC.md`: Photon Fusion 기준 네트워크 명세
+- `docs/GAME_FLOW_SPEC.md`: 라운드 진행 및 상태 전이 명세
+- `docs/TEST_PLAN.md`: 기능별 테스트 계획
 
 ## Development Direction
 
