@@ -20,6 +20,11 @@
 - `docs/START_CHECKLIST.md`: 개발 시작 체크리스트
 - `docs/IMPLEMENTATION_ORDER.md`: 실제 구현 순서
 - `docs/PROJECT_SETUP.md`: Unity 프로젝트 생성 및 초기 세팅 순서
+- `docs/GAME_SPEC.md`: 전체 게임 명세
+- `docs/SYSTEM_SPEC.md`: 시스템별 상세 명세
+- `docs/COLLABORATION_GUIDE.md`: 팀 협업 규칙
+- `docs/GIT_WORKFLOW.md`: 브랜치 및 병합 규칙
+- `docs/FOLDER_CONVENTIONS.md`: 폴더 구조 및 네이밍 규칙
 
 ## Development Direction
 
