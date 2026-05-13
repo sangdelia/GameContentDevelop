@@ -19,6 +19,7 @@
 - `docs/TECH_STACK.md`: Unity 및 멀티플레이 기술 선택 기준
 - `docs/START_CHECKLIST.md`: 개발 시작 체크리스트
 - `docs/IMPLEMENTATION_ORDER.md`: 실제 구현 순서
+- `docs/PROJECT_SETUP.md`: Unity 프로젝트 생성 및 초기 세팅 순서
 
 ## Development Direction
 
