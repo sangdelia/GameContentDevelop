@@ -36,6 +36,9 @@
 - `docs/EVENT_CONVENTIONS.md`: 이벤트 및 신호 이름 규칙
 - `docs/CODING_CONVENTIONS.md`: C# 코딩 규칙
 - `docs/OWNERSHIP_MATRIX.md`: 파일 및 시스템 소유 범위
+- `docs/BOOTSTRAP_PLAN.md`: Unity 프로젝트 초기 구성 절차
+- `docs/INITIAL_SCRIPT_LIST.md`: 첫 구현 스크립트 목록과 책임
+- `docs/SPRINT_BACKLOG.md`: 구현 우선순위 기반 작업 백로그
 
 ## Development Direction
 
