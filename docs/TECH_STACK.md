@@ -6,7 +6,7 @@
 
 ## 확정 선택
 
-- Unity: `Unity 6 LTS`
+- Unity: `Unity 6.3 LTS`
 - 멀티플레이: `Photon Fusion`
 - 렌더 파이프라인: `URP`
 - 입력 시스템: `Unity Input System`
@@ -32,10 +32,41 @@
 
 ## 세부 기준
 
-### Unity 6 LTS
+### Unity 6.3 LTS
 
 - 원칙: 팀원 전원이 같은 에디터 버전 사용
-- 프로젝트 생성 시 URP 템플릿 사용 권장
+- Unity Hub `Installs`에서 같은 LTS 버전 설치
+- 프로젝트 생성 시 `Universal 3D` 템플릿 사용
+- 프로젝트 생성 직후 렌더 파이프라인 혼용 금지
+
+### Unity 설치 모듈 기준
+
+- 필수 권장:
+  - `Microsoft Visual Studio Community` 또는 코드 에디터 연동 항목
+  - `Windows Build Support (IL2CPP)`
+
+- 현재 단계에서 선택 제외:
+  - `Android Build Support`
+  - `iOS Build Support`
+  - `WebGL Build Support`
+
+### Unity Hub 기준 설치 절차
+
+1. `Unity Hub` 실행
+2. 왼쪽 `Installs` 선택
+3. `Install Editor` 또는 `Add` 클릭
+4. `Unity 6.3 LTS` 선택
+5. 권장 모듈 체크
+6. `Install` 클릭
+
+### 프로젝트 생성 기준
+
+1. 왼쪽 `Projects` 선택
+2. `New project` 클릭
+3. `Universal 3D` 선택
+4. 프로젝트명 `BlackoutShift`
+5. 저장 경로 지정
+6. `Create project` 클릭
 
 ### Photon Fusion
 
@@ -58,7 +89,7 @@
 
 ## 오늘 확정해야 할 항목
 
-- Unity 6 LTS 사용
+- Unity 6.3 LTS 사용
 - Photon Fusion 사용
 - URP 사용
 - 브랜치 전략

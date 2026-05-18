@@ -6,10 +6,37 @@ Unity 프로젝트를 처음 만들 때 팀원마다 다른 구조로 시작하�
 
 ## 2. 프로젝트 생성 기준
 
-- Unity 버전: `Unity 6 LTS`
+- Unity 버전: `Unity 6.3 LTS`
 - 프로젝트 이름: `BlackoutShift`
-- 템플릿: `Universal 3D` 또는 `URP`
+- 템플릿: `Universal 3D`
 - 버전 관리 시작 지점: 프로젝트 생성 직후 첫 커밋
+
+### Unity Hub 설치 순서
+
+1. `Unity Hub` 실행
+2. `Installs` 이동
+3. `Install Editor` 클릭
+4. `Unity 6.3 LTS` 선택
+5. 아래 항목 체크
+   - `Microsoft Visual Studio Community` 또는 코드 에디터 연동
+   - `Windows Build Support (IL2CPP)`
+6. `Install` 클릭
+
+### 프로젝트 생성 순서
+
+1. `Projects` 이동
+2. `New project` 클릭
+3. `Universal 3D` 선택
+4. 프로젝트명 `BlackoutShift` 입력
+5. 저장 경로 지정
+6. `Create project` 클릭
+
+### 생성 직후 확인
+
+- `Console` 에러 없음
+- `Assets` 폴더 정상 생성
+- URP 기본 조명 표시 정상
+- 팀원이 같은 Unity 버전으로 열 수 있음
 
 ## 3. 생성 직후 폴더 구조
 
@@ -68,6 +95,18 @@ Unity 프로젝트를 처음 만들 때 팀원마다 다른 구조로 시작하�
 - `UI`
 - `Lighting`
 - `Audio`
+
+### TestRoom 첫 배치 세부 기준
+
+- 바닥: `Plane` 1개
+- 벽: `Cube` 2~4개
+- 스폰 포인트:
+  - `PlayerSpawn_A`
+  - `PlayerSpawn_B`
+  - `PlayerSpawn_C`
+
+- 각 스폰 포인트는 서로 겹치지 않게 배치
+- 아직 드론, 감옥, 경보등 세부 배치는 하지 않음
 
 ## 6. 첫날 반드시 생성할 프리팹
 
