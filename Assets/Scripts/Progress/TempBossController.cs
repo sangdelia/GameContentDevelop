@@ -27,6 +27,9 @@ public class TempBossController : MonoBehaviour
     private Renderer bodyRenderer;
     private LineRenderer warningLine;
     private LineRenderer fireLine;
+    private Transform topRing;
+    private Transform lowerRing;
+    private Transform eyeCore;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -65,6 +68,7 @@ public class TempBossController : MonoBehaviour
         bodyRenderer.material.EnableKeyword("_EMISSION");
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
         bossStartTime = Time.time;
+        BuildBossVisuals();
 
         warningLine = CreateLine("DeathBeamWarningLine", new Color(1f, 0.05f, 0.05f, 0.75f), 0.08f);
         fireLine = CreateLine("DeathBeamFireLine", new Color(1f, 0.1f, 0.02f, 1f), deathBeamRadius * 2f);
@@ -86,6 +90,7 @@ public class TempBossController : MonoBehaviour
         FacePlayer();
         MoveTowardPlayer();
         TryTouchDamage();
+        AnimateBossVisuals();
 
         if (Time.time - bossStartTime < fightStartGraceTime)
             return;
@@ -228,6 +233,62 @@ public class TempBossController : MonoBehaviour
 
         bodyRenderer.material.color = normalColor;
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
+    }
+
+    private void BuildBossVisuals()
+    {
+        topRing = CreateBossRing("TopReactorRing", new Vector3(0f, 0.82f, 0f), new Vector3(1.28f, 0.05f, 1.28f), new Color(0.1f, 0.9f, 1f));
+        lowerRing = CreateBossRing("LowerReactorRing", new Vector3(0f, -0.42f, 0f), new Vector3(1.08f, 0.04f, 1.08f), new Color(1f, 0.2f, 0.9f));
+
+        GameObject eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        eye.name = "BossEyeCore";
+        eye.transform.SetParent(transform, false);
+        eye.transform.localPosition = new Vector3(0f, 0.12f, 0.55f);
+        eye.transform.localScale = Vector3.one * 0.28f;
+        Destroy(eye.GetComponent<Collider>());
+        ApplyBossMaterial(eye, new Color(1f, 0.05f, 0.05f), 2.4f);
+        eyeCore = eye.transform;
+    }
+
+    private Transform CreateBossRing(string name, Vector3 localPosition, Vector3 localScale, Color color)
+    {
+        GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        ring.name = name;
+        ring.transform.SetParent(transform, false);
+        ring.transform.localPosition = localPosition;
+        ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        ring.transform.localScale = localScale;
+        Destroy(ring.GetComponent<Collider>());
+        ApplyBossMaterial(ring, color, 2f);
+        return ring.transform;
+    }
+
+    private void AnimateBossVisuals()
+    {
+        if (topRing != null)
+        {
+            topRing.Rotate(0f, 0f, 85f * Time.deltaTime, Space.Self);
+        }
+
+        if (lowerRing != null)
+        {
+            lowerRing.Rotate(0f, 0f, -120f * Time.deltaTime, Space.Self);
+        }
+
+        if (eyeCore != null)
+        {
+            float pulse = 0.24f + Mathf.Sin(Time.time * 5.5f) * 0.04f;
+            eyeCore.localScale = Vector3.one * pulse;
+        }
+    }
+
+    private void ApplyBossMaterial(GameObject target, Color color, float emission)
+    {
+        Renderer renderer = target.GetComponent<Renderer>();
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        renderer.material.color = color;
+        renderer.material.EnableKeyword("_EMISSION");
+        renderer.material.SetColor("_EmissionColor", color * emission);
     }
 
     private LineRenderer CreateLine(string lineName, Color color, float width)

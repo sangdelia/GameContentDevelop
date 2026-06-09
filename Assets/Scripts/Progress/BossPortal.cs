@@ -4,6 +4,7 @@ public class BossPortal : MonoBehaviour
 {
     private GameProgressManager progressManager;
     private Transform visual;
+    private Transform ringVisual;
     private Transform player;
     private float enterRadius = 2.2f;
 
@@ -37,6 +38,17 @@ public class BossPortal : MonoBehaviour
         ring.transform.localScale = new Vector3(2.6f, 0.08f, 2.6f);
         Destroy(ring.GetComponent<Collider>());
         ApplyMaterial(ring, new Color(0.05f, 0.85f, 1f, 0.75f));
+        ringVisual = ring.transform;
+
+        GameObject gateModel = Resources.Load<GameObject>("Models/KenneySpace/gate-lasers");
+        if (gateModel != null)
+        {
+            GameObject gate = Instantiate(gateModel, transform);
+            gate.name = "PortalGateDecor";
+            gate.transform.localPosition = Vector3.up * 0.05f;
+            gate.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            gate.transform.localScale = Vector3.one * 2.25f;
+        }
 
         GameObject core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         core.name = "PortalCore";
@@ -58,6 +70,11 @@ public class BossPortal : MonoBehaviour
     private void Update()
     {
         transform.Rotate(0f, 45f * Time.deltaTime, 0f);
+
+        if (ringVisual != null)
+        {
+            ringVisual.Rotate(0f, 0f, 120f * Time.deltaTime, Space.Self);
+        }
 
         if (visual != null)
         {
