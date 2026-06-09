@@ -69,6 +69,7 @@ public class EnemyHealth : MonoBehaviour
 
         isDead = true;
 
+        GameVfx.SpawnEnemyDeathBurst(transform.position);
         GameAudio.PlayEnemyDie(transform.position);
         DropExp();
         Died?.Invoke(this);

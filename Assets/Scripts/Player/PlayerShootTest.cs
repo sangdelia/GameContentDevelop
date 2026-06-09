@@ -17,8 +17,16 @@ public class PlayerShootTest : MonoBehaviour
     [SerializeField] private float rayVisibleTime = 0.05f;
     [SerializeField] private float rayWidth = 0.04f;
 
+    [Header("PC Test Weapon Visual")]
+    [SerializeField] private bool createPcWeaponVisual = true;
+    [SerializeField] private Vector3 weaponLocalPosition = new Vector3(0.23f, -0.22f, 0.48f);
+    [SerializeField] private Vector3 weaponLocalRotation = new Vector3(-4f, 0f, 0f);
+
     private LineRenderer lineRenderer;
     private Coroutine rayRoutine;
+    private Coroutine recoilRoutine;
+    private Transform weaponRoot;
+    private Transform muzzlePoint;
     private float nextShootTime;
 
     public float Damage => damage;
@@ -41,6 +49,7 @@ public class PlayerShootTest : MonoBehaviour
         }
 
         CreateLineRenderer();
+        CreatePcWeaponVisual();
     }
 
     private void Update()
@@ -93,8 +102,10 @@ public class PlayerShootTest : MonoBehaviour
 
         Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
-        Vector3 start = ray.origin;
+        Vector3 start = muzzlePoint != null ? muzzlePoint.position : ray.origin;
         Vector3 end = ray.origin + ray.direction * range;
+        GameVfx.SpawnMuzzleFlash(start, ray.direction);
+        PlayWeaponRecoil();
 
         if (Physics.Raycast(ray, out RaycastHit hit, range))
         {
@@ -106,11 +117,13 @@ public class PlayerShootTest : MonoBehaviour
 
             if (enemy != null)
             {
+                GameVfx.SpawnHitSpark(hit.point, hit.normal, true);
                 enemy.TakeDamage(damage);
                 Debug.Log("Enemy hit.");
             }
             else
             {
+                GameVfx.SpawnHitSpark(hit.point, hit.normal, false);
                 Debug.LogWarning("Hit object has no EnemyHealth: " + hit.collider.name);
             }
         }
@@ -142,5 +155,88 @@ public class PlayerShootTest : MonoBehaviour
         yield return new WaitForSeconds(rayVisibleTime);
 
         lineRenderer.enabled = false;
+    }
+
+    private void CreatePcWeaponVisual()
+    {
+        if (!createPcWeaponVisual || playerCamera == null)
+            return;
+
+        weaponRoot = new GameObject("PC_Test_Blaster").transform;
+        weaponRoot.SetParent(playerCamera.transform, false);
+        weaponRoot.localPosition = weaponLocalPosition;
+        weaponRoot.localRotation = Quaternion.Euler(weaponLocalRotation);
+
+        CreateWeaponPart("Grip", new Vector3(0f, -0.1f, -0.08f), new Vector3(0.08f, 0.18f, 0.08f), new Color(0.06f, 0.08f, 0.1f));
+        CreateWeaponPart("Body", new Vector3(0f, 0f, 0.06f), new Vector3(0.16f, 0.12f, 0.34f), new Color(0.1f, 0.14f, 0.17f));
+        CreateWeaponPart("Barrel", new Vector3(0f, 0.01f, 0.3f), new Vector3(0.08f, 0.08f, 0.28f), new Color(0.02f, 0.05f, 0.07f));
+        CreateWeaponPart("EnergyCell", new Vector3(0f, 0.08f, 0.06f), new Vector3(0.1f, 0.035f, 0.18f), new Color(0.08f, 0.75f, 1f));
+
+        muzzlePoint = new GameObject("MuzzlePoint").transform;
+        muzzlePoint.SetParent(weaponRoot, false);
+        muzzlePoint.localPosition = new Vector3(0f, 0.01f, 0.48f);
+    }
+
+    private void CreateWeaponPart(string partName, Vector3 localPosition, Vector3 localScale, Color color)
+    {
+        GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        part.name = partName;
+        part.transform.SetParent(weaponRoot, false);
+        part.transform.localPosition = localPosition;
+        part.transform.localScale = localScale;
+
+        Collider collider = part.GetComponent<Collider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        Renderer renderer = part.GetComponent<Renderer>();
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        renderer.material.color = color;
+
+        if (renderer.material.HasProperty("_EmissionColor"))
+        {
+            renderer.material.EnableKeyword("_EMISSION");
+            renderer.material.SetColor("_EmissionColor", color * 0.8f);
+        }
+    }
+
+    private void PlayWeaponRecoil()
+    {
+        if (weaponRoot == null)
+            return;
+
+        if (recoilRoutine != null)
+        {
+            StopCoroutine(recoilRoutine);
+        }
+
+        recoilRoutine = StartCoroutine(RecoilRoutine());
+    }
+
+    private IEnumerator RecoilRoutine()
+    {
+        Vector3 basePosition = weaponLocalPosition;
+        Vector3 recoilPosition = basePosition + new Vector3(0f, -0.015f, -0.065f);
+        float timer = 0f;
+
+        while (timer < 0.045f)
+        {
+            timer += Time.deltaTime;
+            weaponRoot.localPosition = Vector3.Lerp(basePosition, recoilPosition, timer / 0.045f);
+            yield return null;
+        }
+
+        timer = 0f;
+
+        while (timer < 0.08f)
+        {
+            timer += Time.deltaTime;
+            weaponRoot.localPosition = Vector3.Lerp(recoilPosition, basePosition, timer / 0.08f);
+            yield return null;
+        }
+
+        weaponRoot.localPosition = basePosition;
     }
 }

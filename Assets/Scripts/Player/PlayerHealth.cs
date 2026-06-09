@@ -65,6 +65,7 @@ public class PlayerHealth : MonoBehaviour
         {
             shieldReady = false;
             shieldRechargeTimer = shieldRechargeSeconds;
+            GameVfx.SpawnShieldBlock(transform.position);
             NotifyChanged();
             return;
         }

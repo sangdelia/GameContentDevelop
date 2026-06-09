@@ -44,6 +44,7 @@ public class PlayerLevel : MonoBehaviour
         level++;
 
         requiredExp = Mathf.CeilToInt(requiredExp * requiredExpMultiplier);
+        GameVfx.SpawnLevelUp(transform.position);
         GameAudio.PlayLevelUp(transform.position);
 
         Debug.Log($"Level Up! Current level: {level}, next required EXP: {requiredExp}");

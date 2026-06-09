@@ -51,6 +51,7 @@ public class ExpOrb : MonoBehaviour
 
         if (distance <= collectDistance)
         {
+            GameVfx.SpawnExpCollect(transform.position);
             GameAudio.PlayPickup(transform.position);
             playerLevel.AddExp(expAmount);
             Destroy(gameObject);
