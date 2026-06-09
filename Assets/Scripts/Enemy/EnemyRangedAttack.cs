@@ -12,7 +12,9 @@ public class EnemyRangedAttack : MonoBehaviour
     [SerializeField] private float projectileDamage = 8f;
 
     private Transform player;
+    private EnemyVisual visual;
     private float attackTimer;
+    private bool chargeStarted;
 
     public void Configure(float speed, float attackRate, float damage, float preferred, float retreat)
     {
@@ -27,6 +29,7 @@ public class EnemyRangedAttack : MonoBehaviour
     {
         player = target;
         attackTimer = Random.Range(0.4f, attackInterval);
+        visual = GetComponent<EnemyVisual>();
     }
 
     private void Update()
@@ -70,9 +73,18 @@ public class EnemyRangedAttack : MonoBehaviour
         attackTimer -= Time.deltaTime;
 
         if (attackTimer > 0f)
+        {
+            if (!chargeStarted && attackTimer <= 0.45f && visual != null)
+            {
+                chargeStarted = true;
+                visual.PlayAttackCharge(0.45f);
+            }
+
             return;
+        }
 
         attackTimer = attackInterval;
+        chargeStarted = false;
 
         Vector3 origin = transform.position + Vector3.up * 1.1f + direction * 0.8f;
         Vector3 target = player.position + Vector3.up * 0.75f;

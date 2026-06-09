@@ -12,6 +12,7 @@ public class EnemyMoveToPlayer : MonoBehaviour
 
     private Transform player;
     private PlayerHealth playerHealth;
+    private EnemyVisual visual;
     private float attackTimer;
 
     public void Configure(float speed, float damage, float interval, float stoppingDistance)
@@ -35,6 +36,8 @@ public class EnemyMoveToPlayer : MonoBehaviour
                 playerHealth = player.gameObject.AddComponent<PlayerHealth>();
             }
         }
+
+        visual = GetComponent<EnemyVisual>();
     }
 
     private void Update()
@@ -73,6 +76,11 @@ public class EnemyMoveToPlayer : MonoBehaviour
             return;
 
         attackTimer = attackInterval;
+        if (visual != null)
+        {
+            visual.PlayMeleePulse();
+        }
+
         playerHealth.TakeDamage(attackDamage);
     }
 }

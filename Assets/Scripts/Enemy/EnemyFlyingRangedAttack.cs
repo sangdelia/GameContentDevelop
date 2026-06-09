@@ -14,8 +14,10 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
     [SerializeField] private float projectileDamage = 7f;
 
     private Transform player;
+    private EnemyVisual visual;
     private float attackTimer;
     private float bobSeed;
+    private bool chargeStarted;
 
     public void Configure(float speed, float attackRate, float damage, float preferred, float height)
     {
@@ -31,6 +33,7 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
         player = target;
         attackTimer = Random.Range(0.25f, attackInterval);
         bobSeed = Random.Range(0f, 100f);
+        visual = GetComponent<EnemyVisual>();
     }
 
     private void Update()
@@ -74,9 +77,18 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
         attackTimer -= Time.deltaTime;
 
         if (attackTimer > 0f)
+        {
+            if (!chargeStarted && attackTimer <= 0.38f && visual != null)
+            {
+                chargeStarted = true;
+                visual.PlayAttackCharge(0.38f);
+            }
+
             return;
+        }
 
         attackTimer = attackInterval;
+        chargeStarted = false;
 
         Vector3 origin = transform.position + transform.forward * 0.7f;
         Vector3 target = player.position + Vector3.up * 0.85f;

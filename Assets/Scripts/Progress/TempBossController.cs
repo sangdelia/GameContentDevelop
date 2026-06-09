@@ -435,6 +435,11 @@ public class TempBossController : MonoBehaviour
 
     private void HandleDied(EnemyHealth enemy)
     {
+        GameVfx.SpawnLevelUp(transform.position);
+        GameVfx.SpawnEnemyDeathBurst(transform.position + Vector3.up * 1.5f);
+        GameVfx.SpawnEnemyDeathBurst(transform.position + transform.right * 1.8f + Vector3.up);
+        GameVfx.SpawnEnemyDeathBurst(transform.position - transform.right * 1.8f + Vector3.up);
+
         Defeated?.Invoke();
 
         StargraveRuntimeUI ui = FindFirstObjectByType<StargraveRuntimeUI>();
