@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -6,9 +7,47 @@ using UnityEngine.UI;
 
 public class StargraveRuntimeUI : MonoBehaviour
 {
+    private enum TraitKind
+    {
+        Damage,
+        FireRate,
+        MoveSpeed,
+        Magnet,
+        MaxHealth,
+        Armor,
+        Repair
+    }
+
+    private class TraitOption
+    {
+        public readonly TraitKind Kind;
+        public readonly string Title;
+        public readonly string Description;
+        public readonly int MaxRank;
+
+        public TraitOption(TraitKind kind, string title, string description, int maxRank)
+        {
+            Kind = kind;
+            Title = title;
+            Description = description;
+            MaxRank = maxRank;
+        }
+    }
+
     [Header("PC Test Layout")]
     [SerializeField] private bool useStartScreen = false;
     [SerializeField] private Vector2 canvasSize = new Vector2(1200f, 700f);
+
+    private readonly TraitOption[] traitCatalog =
+    {
+        new TraitOption(TraitKind.Damage, "OVERCHARGED ROUNDS", "Weapon Damage +20%", 5),
+        new TraitOption(TraitKind.FireRate, "RAPID CHAMBER", "Fire Rate +15%", 5),
+        new TraitOption(TraitKind.MoveSpeed, "COMBAT STIMS", "Move Speed +10%", 5),
+        new TraitOption(TraitKind.Magnet, "GRAVITY COLLECTOR", "EXP Pull Range +2m", 5),
+        new TraitOption(TraitKind.MaxHealth, "REINFORCED VITALS", "Max HP +20", 4),
+        new TraitOption(TraitKind.Armor, "PLATED SUIT", "Incoming Damage -1.5", 4),
+        new TraitOption(TraitKind.Repair, "AUTO REPAIR GEL", "HP Regen +0.5/sec", 5)
+    };
 
     private Canvas canvas;
     private RectTransform root;
@@ -36,15 +75,15 @@ public class StargraveRuntimeUI : MonoBehaviour
     private PlayerDummyMove playerMove;
     private GameProgressManager progressManager;
     private EnemyHealth bossHealth;
+    private readonly List<TraitOption> currentTraitChoices = new List<TraitOption>();
+    private readonly Dictionary<TraitKind, int> traitRanks = new Dictionary<TraitKind, int>();
+    private Button[] traitButtons;
 
     private bool isStarted;
     private bool isChoosingTrait;
     private bool isBound;
     private bool playerMoveWasEnabled;
     private bool playerShootWasEnabled;
-    private int damageTraitCount;
-    private int speedTraitCount;
-    private int magnetTraitCount;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateRuntimeUI()
@@ -275,9 +314,10 @@ public class StargraveRuntimeUI : MonoBehaviour
         CreateText(traitPanel.transform, "SELECT AUGMENT", 44, TextAnchor.MiddleCenter, new Vector2(0f, 210f), new Vector2(780f, 70f));
         CreateText(traitPanel.transform, "Choose one upgrade. Press 1 / 2 / 3.", 24, TextAnchor.MiddleCenter, new Vector2(0f, 154f), new Vector2(780f, 42f));
 
-        CreateButton(traitPanel.transform, "1  OVERCHARGED ROUNDS\nDamage +25%", new Vector2(-310f, -12f), new Vector2(260f, 210f), () => SelectTrait(0));
-        CreateButton(traitPanel.transform, "2  COMBAT STIMS\nMove Speed +15%", new Vector2(0f, -12f), new Vector2(260f, 210f), () => SelectTrait(1));
-        CreateButton(traitPanel.transform, "3  GRAVITY COLLECTOR\nEXP Pull Range +2m", new Vector2(310f, -12f), new Vector2(260f, 210f), () => SelectTrait(2));
+        traitButtons = new Button[3];
+        traitButtons[0] = CreateButton(traitPanel.transform, "1", new Vector2(-310f, -12f), new Vector2(260f, 210f), () => SelectTrait(0));
+        traitButtons[1] = CreateButton(traitPanel.transform, "2", new Vector2(0f, -12f), new Vector2(260f, 210f), () => SelectTrait(1));
+        traitButtons[2] = CreateButton(traitPanel.transform, "3", new Vector2(310f, -12f), new Vector2(260f, 210f), () => SelectTrait(2));
     }
 
     private void BuildEndPanel()
@@ -441,6 +481,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         Time.timeScale = 0f;
         isChoosingTrait = true;
+        RollTraitChoices();
         traitPanel.SetActive(true);
         SetPlayerControlsEnabled(false);
         Cursor.lockState = CursorLockMode.None;
@@ -452,21 +493,10 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (!isChoosingTrait)
             return;
 
-        if (index == 0 && playerShoot != null)
-        {
-            playerShoot.AddDamageMultiplier(1.25f);
-            damageTraitCount++;
-        }
-        else if (index == 1 && playerMove != null)
-        {
-            playerMove.AddMoveSpeedMultiplier(1.15f);
-            speedTraitCount++;
-        }
-        else if (index == 2)
-        {
-            ExpOrb.AddGlobalAttractBonus(2f);
-            magnetTraitCount++;
-        }
+        if (index < 0 || index >= currentTraitChoices.Count)
+            return;
+
+        ApplyTrait(currentTraitChoices[index]);
 
         UpdateTraitInfoText();
 
@@ -625,7 +655,103 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (traitInfoText == null)
             return;
 
-        traitInfoText.text = $"Traits: DMG x{damageTraitCount}  SPD x{speedTraitCount}  MAG x{magnetTraitCount}";
+        if (traitRanks.Count == 0)
+        {
+            traitInfoText.text = "Traits: none";
+            return;
+        }
+
+        traitInfoText.text =
+            $"Traits: DMG {GetTraitRank(TraitKind.Damage)}  ROF {GetTraitRank(TraitKind.FireRate)}  " +
+            $"SPD {GetTraitRank(TraitKind.MoveSpeed)}  MAG {GetTraitRank(TraitKind.Magnet)}\n" +
+            $"HP {GetTraitRank(TraitKind.MaxHealth)}  ARM {GetTraitRank(TraitKind.Armor)}  REG {GetTraitRank(TraitKind.Repair)}";
+    }
+
+    private void RollTraitChoices()
+    {
+        currentTraitChoices.Clear();
+
+        List<TraitOption> pool = new List<TraitOption>();
+
+        for (int i = 0; i < traitCatalog.Length; i++)
+        {
+            if (GetTraitRank(traitCatalog[i].Kind) < traitCatalog[i].MaxRank)
+            {
+                pool.Add(traitCatalog[i]);
+            }
+        }
+
+        for (int i = 0; i < traitButtons.Length; i++)
+        {
+            if (pool.Count == 0)
+            {
+                traitButtons[i].gameObject.SetActive(false);
+                continue;
+            }
+
+            int selectedIndex = Random.Range(0, pool.Count);
+            TraitOption option = pool[selectedIndex];
+            pool.RemoveAt(selectedIndex);
+
+            currentTraitChoices.Add(option);
+            SetTraitButton(i, option);
+        }
+    }
+
+    private void SetTraitButton(int index, TraitOption option)
+    {
+        if (traitButtons == null || index < 0 || index >= traitButtons.Length)
+            return;
+
+        traitButtons[index].gameObject.SetActive(true);
+
+        Text buttonText = traitButtons[index].GetComponentInChildren<Text>();
+
+        if (buttonText == null)
+            return;
+
+        int nextRank = GetTraitRank(option.Kind) + 1;
+        buttonText.text = $"{index + 1}  {option.Title}\n{option.Description}\nRank {nextRank} / {option.MaxRank}";
+    }
+
+    private void ApplyTrait(TraitOption option)
+    {
+        IncrementTraitRank(option.Kind);
+
+        switch (option.Kind)
+        {
+            case TraitKind.Damage:
+                if (playerShoot != null) playerShoot.AddDamageMultiplier(1.2f);
+                break;
+            case TraitKind.FireRate:
+                if (playerShoot != null) playerShoot.AddAttackSpeedMultiplier(1.15f);
+                break;
+            case TraitKind.MoveSpeed:
+                if (playerMove != null) playerMove.AddMoveSpeedMultiplier(1.1f);
+                break;
+            case TraitKind.Magnet:
+                ExpOrb.AddGlobalAttractBonus(2f);
+                break;
+            case TraitKind.MaxHealth:
+                if (playerHealth != null) playerHealth.AddMaxHealth(20f);
+                break;
+            case TraitKind.Armor:
+                if (playerHealth != null) playerHealth.AddFlatDamageReduction(1.5f);
+                break;
+            case TraitKind.Repair:
+                if (playerHealth != null) playerHealth.AddHealthRegen(0.5f);
+                break;
+        }
+    }
+
+    private int GetTraitRank(TraitKind kind)
+    {
+        return traitRanks.TryGetValue(kind, out int rank) ? rank : 0;
+    }
+
+    private void IncrementTraitRank(TraitKind kind)
+    {
+        traitRanks[kind] = GetTraitRank(kind) + 1;
     }
 
     private void HandleHealthChanged(float current, float max)
