@@ -15,7 +15,9 @@ public class StargraveRuntimeUI : MonoBehaviour
         Magnet,
         MaxHealth,
         Armor,
-        Repair
+        Repair,
+        LifeSteal,
+        Shield
     }
 
     private class TraitOption
@@ -46,7 +48,9 @@ public class StargraveRuntimeUI : MonoBehaviour
         new TraitOption(TraitKind.Magnet, "GRAVITY COLLECTOR", "EXP Pull Range +2m", 5),
         new TraitOption(TraitKind.MaxHealth, "REINFORCED VITALS", "Max HP +20", 4),
         new TraitOption(TraitKind.Armor, "PLATED SUIT", "Incoming Damage -1.5", 4),
-        new TraitOption(TraitKind.Repair, "AUTO REPAIR GEL", "HP Regen +0.5/sec", 5)
+        new TraitOption(TraitKind.Repair, "AUTO REPAIR GEL", "HP Regen +0.5/sec", 5),
+        new TraitOption(TraitKind.LifeSteal, "SIPHON MATRIX", "Heal +2 HP on kill", 5),
+        new TraitOption(TraitKind.Shield, "PHASE SHIELD", "Block one hit. Recharge improves.", 4)
     };
 
     private Canvas canvas;
@@ -296,7 +300,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         healthFill = CreateAnchoredBar(hudPanel.transform, new Vector2(0f, 1f), new Vector2(28f, -58f), new Vector2(280f, 24f), new Color(0.9f, 0.1f, 0.16f, 1f));
 
         levelText = CreateAnchoredText(hudPanel.transform, "LV 1", 28, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-28f, -24f), new Vector2(260f, 38f));
-        traitInfoText = CreateAnchoredText(hudPanel.transform, "Traits: none", 21, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-28f, -60f), new Vector2(360f, 36f));
+        traitInfoText = CreateAnchoredText(hudPanel.transform, "Traits: none", 18, TextAnchor.UpperRight, new Vector2(1f, 1f), new Vector2(-28f, -60f), new Vector2(470f, 76f));
         objectiveText = CreateAnchoredText(hudPanel.transform, "Kills 0 / 10", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(520f, 38f));
 
         bossNameText = CreateAnchoredText(hudPanel.transform, "STARGRAVE CORE", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(560f, 34f));
@@ -664,7 +668,8 @@ public class StargraveRuntimeUI : MonoBehaviour
         traitInfoText.text =
             $"Traits: DMG {GetTraitRank(TraitKind.Damage)}  ROF {GetTraitRank(TraitKind.FireRate)}  " +
             $"SPD {GetTraitRank(TraitKind.MoveSpeed)}  MAG {GetTraitRank(TraitKind.Magnet)}\n" +
-            $"HP {GetTraitRank(TraitKind.MaxHealth)}  ARM {GetTraitRank(TraitKind.Armor)}  REG {GetTraitRank(TraitKind.Repair)}";
+            $"HP {GetTraitRank(TraitKind.MaxHealth)}  ARM {GetTraitRank(TraitKind.Armor)}  REG {GetTraitRank(TraitKind.Repair)}  " +
+            $"LSH {GetTraitRank(TraitKind.LifeSteal)}  SHD {GetTraitRank(TraitKind.Shield)}";
     }
 
     private void RollTraitChoices()
@@ -741,6 +746,12 @@ public class StargraveRuntimeUI : MonoBehaviour
             case TraitKind.Repair:
                 if (playerHealth != null) playerHealth.AddHealthRegen(0.5f);
                 break;
+            case TraitKind.LifeSteal:
+                if (playerHealth != null) playerHealth.AddHealOnKill(2f);
+                break;
+            case TraitKind.Shield:
+                if (playerHealth != null) playerHealth.ImproveRechargeShield(18f, 3f);
+                break;
         }
     }
 
@@ -758,7 +769,8 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         if (healthText != null)
         {
-            healthText.text = $"HP {Mathf.CeilToInt(current)} / {Mathf.CeilToInt(max)}";
+            string shieldText = playerHealth != null && playerHealth.HasShieldReady ? "  SHIELD" : string.Empty;
+            healthText.text = $"HP {Mathf.CeilToInt(current)} / {Mathf.CeilToInt(max)}{shieldText}";
         }
 
         if (healthFill != null)
