@@ -30,6 +30,7 @@ public class TempBossController : MonoBehaviour
     private Transform topRing;
     private Transform lowerRing;
     private Transform eyeCore;
+    private Transform bossAura;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -223,6 +224,7 @@ public class TempBossController : MonoBehaviour
         end = GetBeamEnd(origin, direction);
         SetLine(fireLine, origin, end);
         fireLine.enabled = true;
+        GameVfx.SpawnLaserImpact(end, direction, new Color(1f, 0.12f, 0.03f));
 
         GameAudio.PlayBossLaser(origin);
         ApplyBeamDamage(origin, direction);
@@ -248,6 +250,16 @@ public class TempBossController : MonoBehaviour
         Destroy(eye.GetComponent<Collider>());
         ApplyBossMaterial(eye, new Color(1f, 0.05f, 0.05f), 2.4f);
         eyeCore = eye.transform;
+
+        bossAura = GameVfx.CreatePersistentVfxQuad(
+            "BossCoreAuraSprite",
+            transform,
+            new Vector3(0f, 0.15f, 0.64f),
+            Quaternion.identity,
+            Vector3.one * 1.35f,
+            "circle_05",
+            new Color(1f, 0.1f, 0.55f, 0.86f)
+        );
     }
 
     private Transform CreateBossRing(string name, Vector3 localPosition, Vector3 localScale, Color color)
@@ -279,6 +291,12 @@ public class TempBossController : MonoBehaviour
         {
             float pulse = 0.24f + Mathf.Sin(Time.time * 5.5f) * 0.04f;
             eyeCore.localScale = Vector3.one * pulse;
+        }
+
+        if (bossAura != null)
+        {
+            bossAura.localRotation = Quaternion.Euler(0f, 0f, Time.time * 95f);
+            bossAura.localScale = Vector3.one * (1.25f + Mathf.Sin(Time.time * 6.2f) * 0.12f);
         }
     }
 

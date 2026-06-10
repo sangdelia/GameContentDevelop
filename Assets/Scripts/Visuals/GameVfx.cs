@@ -2,6 +2,8 @@ using UnityEngine;
 
 public static class GameVfx
 {
+    private const string ParticleTextureRoot = "Textures/KenneyParticles/";
+
     public static void SpawnMuzzleFlash(Vector3 position, Vector3 direction)
     {
         SpawnMuzzleFlash(position, direction, new Color(1f, 0.72f, 0.18f));
@@ -9,14 +11,9 @@ public static class GameVfx
 
     public static void SpawnMuzzleFlash(Vector3 position, Vector3 direction, Color color)
     {
-        GameObject flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        flash.name = "VFX_MuzzleFlash";
-        flash.transform.position = position + direction.normalized * 0.08f;
-        flash.transform.localScale = Vector3.one * 0.22f;
-
-        RemoveCollider(flash);
-        ApplyMaterial(flash, color, 3f);
-        Object.Destroy(flash, 0.045f);
+        Vector3 forward = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
+        CreateTexturedQuad("VFX_MuzzleFlash", null, position + forward * 0.1f, Quaternion.LookRotation(forward), Vector3.one * 0.72f, "muzzle_03", color, 0.055f);
+        CreateTexturedQuad("VFX_MuzzleCore", null, position + forward * 0.13f, Quaternion.LookRotation(forward), Vector3.one * 0.46f, "light_02", Color.white, 0.04f);
 
         SpawnBurst(position, color, 12, 0.08f, 0.18f, 0.18f);
     }
@@ -24,11 +21,19 @@ public static class GameVfx
     public static void SpawnHitSpark(Vector3 position, Vector3 normal, bool hitEnemy)
     {
         Color color = hitEnemy ? new Color(1f, 0.18f, 0.12f) : new Color(0.65f, 0.85f, 1f);
-        SpawnBurst(position + normal.normalized * 0.04f, color, hitEnemy ? 18 : 10, 0.05f, 0.16f, 0.28f);
+        Vector3 facing = normal.sqrMagnitude > 0.001f ? normal.normalized : Vector3.up;
+        SpawnBurst(position + facing * 0.04f, color, hitEnemy ? 18 : 10, 0.05f, 0.16f, 0.28f);
+        CreateTexturedQuad("VFX_ImpactSpark", null, position + facing * 0.06f, Quaternion.LookRotation(facing), Vector3.one * (hitEnemy ? 0.9f : 0.62f), hitEnemy ? "spark_06" : "spark_05", color, 0.16f);
+
+        if (!hitEnemy)
+        {
+            CreateTexturedQuad("VFX_ImpactScorch", null, position + facing * 0.035f, Quaternion.LookRotation(facing), Vector3.one * 0.48f, "scorch_02", new Color(0.12f, 0.16f, 0.18f, 0.85f), 1.6f);
+        }
     }
 
     public static void SpawnEnemyDeathBurst(Vector3 position)
     {
+        CreateTexturedQuad("VFX_DeathFlash", null, position + Vector3.up * 0.8f, Quaternion.LookRotation(Vector3.up), Vector3.one * 1.45f, "circle_04", new Color(0.95f, 0.1f, 1f), 0.2f);
         SpawnBurst(position + Vector3.up * 0.8f, new Color(0.95f, 0.1f, 1f), 34, 0.12f, 0.3f, 0.6f);
     }
 
@@ -39,7 +44,24 @@ public static class GameVfx
 
     public static void SpawnLevelUp(Vector3 position)
     {
+        CreateTexturedQuad("VFX_LevelUpRing", null, position + Vector3.up * 1.2f, Quaternion.LookRotation(Vector3.up), Vector3.one * 1.7f, "twirl_02", new Color(0.2f, 1f, 0.55f), 0.5f);
         SpawnBurst(position + Vector3.up * 1.2f, new Color(0.2f, 1f, 0.55f), 42, 0.08f, 0.45f, 0.75f);
+    }
+
+    public static void SpawnLaserImpact(Vector3 position, Vector3 direction, Color color)
+    {
+        Vector3 facing = direction.sqrMagnitude > 0.001f ? -direction.normalized : Vector3.up;
+        CreateTexturedQuad("VFX_LaserImpact", null, position + facing * 0.08f, Quaternion.LookRotation(facing), Vector3.one * 1.05f, "spark_07", color, 0.22f);
+        CreateTexturedQuad("VFX_LaserRing", null, position + facing * 0.06f, Quaternion.LookRotation(facing), Vector3.one * 0.8f, "circle_03", color, 0.28f);
+        SpawnBurst(position + facing * 0.08f, color, 22, 0.07f, 0.2f, 0.28f);
+    }
+
+    public static Transform CreatePersistentVfxQuad(string name, Transform parent, Vector3 localPosition, Quaternion localRotation, Vector3 localScale, string textureName, Color color)
+    {
+        GameObject quad = CreateTexturedQuad(name, parent, Vector3.zero, Quaternion.identity, localScale, textureName, color, -1f);
+        quad.transform.localPosition = localPosition;
+        quad.transform.localRotation = localRotation;
+        return quad.transform;
     }
 
     public static void SpawnShieldBlock(Vector3 position)
@@ -88,6 +110,46 @@ public static class GameVfx
         Object.Destroy(burstObject, lifetime + 0.15f);
     }
 
+    private static GameObject CreateTexturedQuad(
+        string name,
+        Transform parent,
+        Vector3 worldPosition,
+        Quaternion rotation,
+        Vector3 scale,
+        string textureName,
+        Color color,
+        float lifetime)
+    {
+        GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = name;
+
+        if (parent != null)
+        {
+            quad.transform.SetParent(parent, false);
+        }
+        else
+        {
+            quad.transform.position = worldPosition;
+            quad.transform.rotation = rotation;
+        }
+
+        quad.transform.localScale = scale;
+        RemoveCollider(quad);
+
+        Renderer renderer = quad.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            renderer.material = CreateTextureMaterial(textureName, color);
+        }
+
+        if (lifetime > 0f)
+        {
+            Object.Destroy(quad, lifetime);
+        }
+
+        return quad;
+    }
+
     private static void RemoveCollider(GameObject target)
     {
         Collider collider = target.GetComponent<Collider>();
@@ -124,6 +186,45 @@ public static class GameVfx
         {
             material.EnableKeyword("_EMISSION");
             material.SetColor("_EmissionColor", color * emission);
+        }
+
+        return material;
+    }
+
+    private static Material CreateTextureMaterial(string textureName, Color color)
+    {
+        Shader shader = Shader.Find("Sprites/Default");
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+
+        Material material = new Material(shader);
+        material.renderQueue = 3000;
+        Texture2D texture = Resources.Load<Texture2D>(ParticleTextureRoot + textureName);
+
+        if (texture == null)
+        {
+            Sprite sprite = Resources.Load<Sprite>(ParticleTextureRoot + textureName);
+            texture = sprite != null ? sprite.texture : null;
+        }
+
+        if (texture != null)
+        {
+            material.mainTexture = texture;
+
+            if (material.HasProperty("_BaseMap"))
+            {
+                material.SetTexture("_BaseMap", texture);
+            }
+        }
+
+        material.color = color;
+
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
         }
 
         return material;

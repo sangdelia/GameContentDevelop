@@ -7,12 +7,14 @@ public class BossProjectile : MonoBehaviour
 
     private Vector3 direction;
     private float damage;
+    private Transform traceSprite;
 
     public static BossProjectile Create(Vector3 position, Vector3 direction, float damage)
     {
         GameObject projectileObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         projectileObject.name = "BossProjectile";
         projectileObject.transform.position = position;
+        projectileObject.transform.rotation = Quaternion.LookRotation(direction.normalized);
         projectileObject.transform.localScale = Vector3.one * 0.55f;
 
         SphereCollider collider = projectileObject.GetComponent<SphereCollider>();
@@ -31,6 +33,7 @@ public class BossProjectile : MonoBehaviour
         BossProjectile projectile = projectileObject.AddComponent<BossProjectile>();
         projectile.direction = direction.normalized;
         projectile.damage = damage;
+        projectile.BuildTraceSprite();
 
         return projectile;
     }
@@ -46,6 +49,19 @@ public class BossProjectile : MonoBehaviour
         }
     }
 
+    private void BuildTraceSprite()
+    {
+        traceSprite = GameVfx.CreatePersistentVfxQuad(
+            "BossProjectileTraceSprite",
+            transform,
+            Vector3.back * 0.45f,
+            Quaternion.Euler(0f, 0f, 90f),
+            new Vector3(0.55f, 1.65f, 1f),
+            "trace_06",
+            new Color(1f, 0.22f, 0.08f, 0.9f)
+        );
+    }
+
     private void OnTriggerEnter(Collider other)
     {
         if (other.GetComponentInParent<TempBossController>() != null)
@@ -55,6 +71,7 @@ public class BossProjectile : MonoBehaviour
 
         if (playerHealth != null)
         {
+            GameVfx.SpawnLaserImpact(transform.position, direction, new Color(1f, 0.18f, 0.06f));
             playerHealth.TakeDamage(damage);
             Destroy(gameObject);
             return;
@@ -67,6 +84,7 @@ public class BossProjectile : MonoBehaviour
         if (objectName.Contains("Ground") || objectName.Contains("Floor"))
             return;
 
+        GameVfx.SpawnLaserImpact(transform.position, direction, new Color(1f, 0.18f, 0.06f));
         Destroy(gameObject);
     }
 }

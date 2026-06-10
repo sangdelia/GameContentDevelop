@@ -5,6 +5,8 @@ public class BossPortal : MonoBehaviour
     private GameProgressManager progressManager;
     private Transform visual;
     private Transform ringVisual;
+    private Transform portalTwirl;
+    private Transform portalCircle;
     private Transform player;
     private float enterRadius = 2.2f;
 
@@ -65,6 +67,26 @@ public class BossPortal : MonoBehaviour
         light.intensity = 3f;
 
         visual = core.transform;
+
+        portalTwirl = GameVfx.CreatePersistentVfxQuad(
+            "PortalTwirlSprite",
+            transform,
+            Vector3.up * 1.1f,
+            Quaternion.identity,
+            Vector3.one * 3.2f,
+            "twirl_02",
+            new Color(0.2f, 0.95f, 1f, 0.92f)
+        );
+
+        portalCircle = GameVfx.CreatePersistentVfxQuad(
+            "PortalCircleSprite",
+            transform,
+            Vector3.up * 1.1f,
+            Quaternion.identity,
+            Vector3.one * 3.8f,
+            "circle_04",
+            new Color(0.7f, 0.25f, 1f, 0.82f)
+        );
     }
 
     private void Update()
@@ -80,6 +102,17 @@ public class BossPortal : MonoBehaviour
         {
             float pulse = 1.2f + Mathf.Sin(Time.time * 5f) * 0.15f;
             visual.localScale = Vector3.one * pulse;
+        }
+
+        if (portalTwirl != null)
+        {
+            portalTwirl.localRotation = Quaternion.Euler(0f, 0f, Time.time * 150f);
+            portalTwirl.localScale = Vector3.one * (3.1f + Mathf.Sin(Time.time * 4f) * 0.18f);
+        }
+
+        if (portalCircle != null)
+        {
+            portalCircle.localRotation = Quaternion.Euler(0f, 0f, -Time.time * 70f);
         }
 
         if (player == null)
