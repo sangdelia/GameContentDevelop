@@ -167,6 +167,14 @@ public class PlayerShootTest : MonoBehaviour
         weaponRoot.localPosition = weaponLocalPosition;
         weaponRoot.localRotation = Quaternion.Euler(weaponLocalRotation);
 
+        if (TryCreateImportedGun())
+        {
+            muzzlePoint = new GameObject("MuzzlePoint").transform;
+            muzzlePoint.SetParent(weaponRoot, false);
+            muzzlePoint.localPosition = new Vector3(0f, 0.02f, 0.82f);
+            return;
+        }
+
         CreateWeaponPart("Grip", new Vector3(0f, -0.1f, -0.08f), new Vector3(0.08f, 0.18f, 0.08f), new Color(0.06f, 0.08f, 0.1f));
         CreateWeaponPart("Body", new Vector3(0f, 0f, 0.06f), new Vector3(0.16f, 0.12f, 0.34f), new Color(0.1f, 0.14f, 0.17f));
         CreateWeaponPart("Barrel", new Vector3(0f, 0.01f, 0.3f), new Vector3(0.08f, 0.08f, 0.28f), new Color(0.02f, 0.05f, 0.07f));
@@ -175,6 +183,58 @@ public class PlayerShootTest : MonoBehaviour
         muzzlePoint = new GameObject("MuzzlePoint").transform;
         muzzlePoint.SetParent(weaponRoot, false);
         muzzlePoint.localPosition = new Vector3(0f, 0.01f, 0.48f);
+    }
+
+    private bool TryCreateImportedGun()
+    {
+        GameObject gunPrefab = Resources.Load<GameObject>("Models/Guns/Gun_Rifle");
+
+        if (gunPrefab == null)
+            return false;
+
+        GameObject gun = Instantiate(gunPrefab, weaponRoot);
+        gun.name = "Gun_Rifle_Model";
+        gun.transform.localPosition = Vector3.zero;
+        gun.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+        gun.transform.localScale = Vector3.one * 0.62f;
+
+        Collider[] colliders = gun.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Destroy(colliders[i]);
+        }
+
+        Renderer[] renderers = gun.GetComponentsInChildren<Renderer>();
+        Texture2D baseMap = Resources.Load<Texture2D>("Textures/ImportedSciFi/T_Guns_Batch1_BaseColor");
+        Texture2D normalMap = Resources.Load<Texture2D>("Textures/ImportedSciFi/T_Guns_Batch1_Normal");
+        Texture2D emissionMap = Resources.Load<Texture2D>("Textures/ImportedSciFi/T_Guns_Batch1_Emissive");
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Material material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+            if (baseMap != null)
+            {
+                material.mainTexture = baseMap;
+            }
+
+            if (normalMap != null && material.HasProperty("_BumpMap"))
+            {
+                material.SetTexture("_BumpMap", normalMap);
+                material.EnableKeyword("_NORMALMAP");
+            }
+
+            if (emissionMap != null && material.HasProperty("_EmissionMap"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.SetTexture("_EmissionMap", emissionMap);
+                material.SetColor("_EmissionColor", new Color(0.2f, 0.85f, 1f) * 1.2f);
+            }
+
+            renderers[i].material = material;
+        }
+
+        return true;
     }
 
     private void CreateWeaponPart(string partName, Vector3 localPosition, Vector3 localScale, Color color)
