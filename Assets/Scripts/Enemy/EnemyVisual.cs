@@ -1,7 +1,19 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class EnemyVisual : MonoBehaviour
 {
+    private struct AnimatedPart
+    {
+        public Transform Transform;
+        public Vector3 BaseLocalPosition;
+        public Quaternion BaseLocalRotation;
+        public float Phase;
+        public float Swing;
+        public float Lift;
+        public bool Translate;
+    }
+
     public enum EnemyVisualType
     {
         Melee,
@@ -16,6 +28,7 @@ public class EnemyVisual : MonoBehaviour
     private Transform chargeOrb;
     private Transform muzzlePoint;
     private Renderer[] renderers;
+    private AnimatedPart[] groundAnimatedParts;
     private EnemyVisualType visualType;
     private Color baseColor;
     private Bounds? visualLocalBounds;
@@ -175,6 +188,7 @@ public class EnemyVisual : MonoBehaviour
         visualLocalBounds = GetVisualLocalBounds();
         ConfigureColliderToVisualBounds();
         CreateMuzzlePoint();
+        CacheGroundAnimatedParts();
 
         baseVisualLocalPosition = visualRoot.localPosition;
     }
@@ -224,22 +238,76 @@ public class EnemyVisual : MonoBehaviour
         if (speed > 0.05f)
         {
             walkCycle += Time.deltaTime * Mathf.Lerp(4f, 9f, Mathf.Clamp01(speed / 3f));
-            float sway = Mathf.Sin(walkCycle);
-            float compress = Mathf.Abs(sway) * 0.035f;
 
-            visualRoot.localPosition = baseVisualLocalPosition;
-            visualRoot.localRotation = Quaternion.Euler(compress * 24f, 0f, sway * 4.5f);
-            visualRoot.localScale = new Vector3(1f + compress * 0.35f, 1f - compress, 1f + compress * 0.2f);
-            AlignGroundVisualToColliderBottom();
+            if (groundAnimatedParts != null && groundAnimatedParts.Length > 0)
+            {
+                AnimateGroundParts(speed, true);
+            }
+            else
+            {
+                float sway = Mathf.Sin(walkCycle);
+                visualRoot.localPosition = baseVisualLocalPosition;
+                visualRoot.localRotation = Quaternion.Euler(0f, 0f, sway * 2.2f);
+                visualRoot.localScale = Vector3.one;
+                AlignGroundVisualToColliderBottom();
+            }
         }
         else
         {
-            float idle = Mathf.Sin(Time.time * 1.8f + bobSeed) * 1.2f;
+            AnimateGroundParts(speed, false);
             visualRoot.localPosition = baseVisualLocalPosition;
-            visualRoot.localRotation = Quaternion.Euler(0f, 0f, idle);
+            visualRoot.localRotation = Quaternion.identity;
             visualRoot.localScale = Vector3.one;
-            AlignGroundVisualToColliderBottom();
+
+            if (groundAnimatedParts == null || groundAnimatedParts.Length == 0)
+            {
+                AlignGroundVisualToColliderBottom();
+            }
         }
+    }
+
+    private void AnimateGroundParts(float speed, bool moving)
+    {
+        if (groundAnimatedParts == null || groundAnimatedParts.Length == 0)
+            return;
+
+        float movementAmount = moving ? Mathf.Clamp01(speed / 2.4f) : 0f;
+
+        for (int i = 0; i < groundAnimatedParts.Length; i++)
+        {
+            AnimatedPart part = groundAnimatedParts[i];
+
+            if (part.Transform == null)
+                continue;
+
+            if (!moving)
+            {
+                part.Transform.localPosition = Vector3.Lerp(part.Transform.localPosition, part.BaseLocalPosition, Time.deltaTime * 8f);
+                part.Transform.localRotation = Quaternion.Slerp(part.Transform.localRotation, part.BaseLocalRotation, Time.deltaTime * 8f);
+                continue;
+            }
+
+            float phaseTime = walkCycle + part.Phase;
+            float stride = Mathf.Sin(phaseTime);
+            float footLift = Mathf.Max(0f, Mathf.Sin(phaseTime + Mathf.PI * 0.5f));
+            float swing = stride * part.Swing * movementAmount;
+            float twist = Mathf.Cos(phaseTime) * part.Swing * 0.16f * movementAmount;
+
+            Quaternion targetRotation = part.BaseLocalRotation * Quaternion.Euler(swing, twist, 0f);
+            Vector3 targetPosition = part.BaseLocalPosition;
+
+            if (part.Translate)
+            {
+                targetPosition += new Vector3(0f, footLift * part.Lift * movementAmount, -stride * part.Lift * 0.35f * movementAmount);
+            }
+
+            part.Transform.localPosition = targetPosition;
+            part.Transform.localRotation = targetRotation;
+        }
+
+        visualRoot.localPosition = baseVisualLocalPosition;
+        visualRoot.localRotation = Quaternion.identity;
+        visualRoot.localScale = Vector3.one;
     }
 
     private void UpdateCharge()
@@ -426,6 +494,66 @@ public class EnemyVisual : MonoBehaviour
         {
             chargeOrb.SetParent(muzzlePoint, false);
             chargeOrb.localPosition = Vector3.zero;
+        }
+    }
+
+    private void CacheGroundAnimatedParts()
+    {
+        groundAnimatedParts = null;
+
+        if (visualType == EnemyVisualType.Flying || visualRoot == null)
+            return;
+
+        List<AnimatedPart> parts = new List<AnimatedPart>();
+        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
+        int legIndex = 0;
+
+        for (int i = 0; i < children.Length; i++)
+        {
+            Transform child = children[i];
+
+            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint)
+                continue;
+
+            string lowerName = child.name.ToLowerInvariant();
+
+            if (lowerName.Contains("ik") || lowerName.Contains("pt") || lowerName.Contains("mesh"))
+                continue;
+
+            bool isFoot = lowerName.Contains("foot");
+            bool isLeg = lowerName.Contains("leg") && !lowerName.EndsWith("_legs");
+            bool isShoulder = lowerName.Contains("shoulder");
+
+            if (!isFoot && !isLeg && !isShoulder)
+                continue;
+
+            float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.55f;
+            float swing = visualType == EnemyVisualType.Melee ? 20f : 16f;
+            float lift = visualType == EnemyVisualType.Melee ? 0.11f : 0.08f;
+
+            if (isShoulder)
+            {
+                swing *= 0.55f;
+                lift *= 0.45f;
+            }
+
+            parts.Add(new AnimatedPart
+            {
+                Transform = child,
+                BaseLocalPosition = child.localPosition,
+                BaseLocalRotation = child.localRotation,
+                Phase = phase,
+                Swing = swing,
+                Lift = lift,
+                Translate = isFoot || isLeg
+            });
+
+            legIndex++;
+        }
+
+        if (parts.Count > 0)
+        {
+            groundAnimatedParts = parts.ToArray();
         }
     }
 
