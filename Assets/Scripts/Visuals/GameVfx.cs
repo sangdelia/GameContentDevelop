@@ -4,16 +4,21 @@ public static class GameVfx
 {
     public static void SpawnMuzzleFlash(Vector3 position, Vector3 direction)
     {
+        SpawnMuzzleFlash(position, direction, new Color(1f, 0.72f, 0.18f));
+    }
+
+    public static void SpawnMuzzleFlash(Vector3 position, Vector3 direction, Color color)
+    {
         GameObject flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         flash.name = "VFX_MuzzleFlash";
         flash.transform.position = position + direction.normalized * 0.08f;
         flash.transform.localScale = Vector3.one * 0.22f;
 
         RemoveCollider(flash);
-        ApplyMaterial(flash, new Color(1f, 0.72f, 0.18f), 3f);
+        ApplyMaterial(flash, color, 3f);
         Object.Destroy(flash, 0.045f);
 
-        SpawnBurst(position, new Color(1f, 0.5f, 0.1f), 12, 0.08f, 0.18f, 0.18f);
+        SpawnBurst(position, color, 12, 0.08f, 0.18f, 0.18f);
     }
 
     public static void SpawnHitSpark(Vector3 position, Vector3 normal, bool hitEnemy)

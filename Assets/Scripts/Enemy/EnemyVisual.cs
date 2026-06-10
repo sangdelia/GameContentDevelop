@@ -14,15 +14,19 @@ public class EnemyVisual : MonoBehaviour
     private Transform leftPart;
     private Transform rightPart;
     private Transform chargeOrb;
+    private Transform muzzlePoint;
     private Renderer[] renderers;
     private EnemyVisualType visualType;
     private Color baseColor;
+    private Bounds? visualLocalBounds;
     private Vector3 baseVisualLocalPosition;
     private Vector3 previousPosition;
     private float walkCycle;
     private float bobSeed;
     private float chargeTimer;
     private float chargeDuration;
+    private float fireKickTimer;
+    private float fireKickDuration;
 
     public static EnemyVisual Attach(GameObject enemy, EnemyVisualType type)
     {
@@ -51,6 +55,29 @@ public class EnemyVisual : MonoBehaviour
     public void PlayMeleePulse()
     {
         GameVfx.SpawnHitSpark(transform.position + transform.forward * 0.8f + Vector3.up * 0.8f, -transform.forward, true);
+    }
+
+    public void PlayFireKick()
+    {
+        fireKickDuration = 0.16f;
+        fireKickTimer = fireKickDuration;
+        GameVfx.SpawnMuzzleFlash(GetMuzzlePosition(), transform.forward, baseColor);
+    }
+
+    public Vector3 GetMuzzlePosition()
+    {
+        if (muzzlePoint != null)
+            return muzzlePoint.position;
+
+        return transform.position + Vector3.up * 1.05f + transform.forward * 0.8f;
+    }
+
+    public Vector3 GetAimPoint()
+    {
+        if (core != null)
+            return core.position;
+
+        return transform.position + Vector3.up * 0.8f;
     }
 
     private void Build(EnemyVisualType type)
@@ -145,6 +172,10 @@ public class EnemyVisual : MonoBehaviour
             AlignGroundVisualToColliderBottom();
         }
 
+        visualLocalBounds = GetVisualLocalBounds();
+        ConfigureColliderToVisualBounds();
+        CreateMuzzlePoint();
+
         baseVisualLocalPosition = visualRoot.localPosition;
     }
 
@@ -166,6 +197,7 @@ public class EnemyVisual : MonoBehaviour
         }
 
         UpdateCharge();
+        UpdateFireKick();
     }
 
     private void AnimateMovement()
@@ -230,6 +262,22 @@ public class EnemyVisual : MonoBehaviour
         if (chargeTimer <= 0f)
         {
             chargeOrb.gameObject.SetActive(false);
+        }
+    }
+
+    private void UpdateFireKick()
+    {
+        if (fireKickTimer <= 0f || visualRoot == null)
+            return;
+
+        fireKickTimer -= Time.deltaTime;
+        float progress = 1f - Mathf.Clamp01(fireKickTimer / fireKickDuration);
+        float kick = Mathf.Sin(progress * Mathf.PI) * 0.12f;
+        visualRoot.localPosition = baseVisualLocalPosition - Vector3.forward * kick;
+
+        if (fireKickTimer <= 0f)
+        {
+            visualRoot.localPosition = baseVisualLocalPosition;
         }
     }
 
@@ -347,6 +395,116 @@ public class EnemyVisual : MonoBehaviour
         return true;
     }
 
+    private void CreateMuzzlePoint()
+    {
+        GameObject muzzleObject = new GameObject("EnemyMuzzlePoint");
+        muzzlePoint = muzzleObject.transform;
+        muzzlePoint.SetParent(transform, false);
+
+        if (visualLocalBounds.HasValue)
+        {
+            Bounds bounds = visualLocalBounds.Value;
+            float forwardOffset = visualType == EnemyVisualType.Flying ? 0.22f : 0.16f;
+            float heightRatio = visualType == EnemyVisualType.Flying ? 0.5f : 0.62f;
+            float muzzleY = Mathf.Lerp(bounds.min.y, bounds.max.y, heightRatio);
+            muzzlePoint.localPosition = new Vector3(bounds.center.x, muzzleY, bounds.max.z + forwardOffset);
+        }
+        else if (visualType == EnemyVisualType.Flying)
+        {
+            muzzlePoint.localPosition = new Vector3(0f, 0.15f, 0.95f);
+        }
+        else if (visualType == EnemyVisualType.Ranged)
+        {
+            muzzlePoint.localPosition = new Vector3(0f, 0.35f, 0.95f);
+        }
+        else
+        {
+            muzzlePoint.localPosition = new Vector3(0f, 0.45f, 0.85f);
+        }
+
+        if (chargeOrb != null)
+        {
+            chargeOrb.SetParent(muzzlePoint, false);
+            chargeOrb.localPosition = Vector3.zero;
+        }
+    }
+
+    private void ConfigureColliderToVisualBounds()
+    {
+        Bounds? localBounds = visualLocalBounds;
+
+        if (!localBounds.HasValue)
+            return;
+
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+
+        if (capsule != null)
+        {
+            Bounds bounds = localBounds.Value;
+            float originalBottom = capsule.center.y - capsule.height * 0.5f;
+            float visualHeight = Mathf.Max(0.8f, bounds.size.y);
+            float visualRadius = Mathf.Max(bounds.extents.x, bounds.extents.z);
+
+            capsule.height = Mathf.Max(visualHeight, visualRadius * 2f + 0.1f);
+            capsule.radius = Mathf.Clamp(visualRadius * 0.78f, 0.35f, 1.25f);
+            capsule.center = new Vector3(bounds.center.x, originalBottom + capsule.height * 0.5f, bounds.center.z);
+            return;
+        }
+
+        BoxCollider box = GetComponent<BoxCollider>();
+
+        if (box != null)
+        {
+            Bounds bounds = localBounds.Value;
+            box.center = bounds.center;
+            box.size = new Vector3(Mathf.Max(0.4f, bounds.size.x), Mathf.Max(0.6f, bounds.size.y), Mathf.Max(0.4f, bounds.size.z));
+        }
+    }
+
+    private Bounds? GetVisualLocalBounds()
+    {
+        if (renderers == null || renderers.Length == 0)
+            return null;
+
+        Bounds worldBounds = default;
+        bool hasBounds = false;
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] == null)
+                continue;
+
+            if (chargeOrb != null && renderers[i].transform.IsChildOf(chargeOrb))
+                continue;
+
+            if (!renderers[i].enabled)
+                continue;
+
+            if (!hasBounds)
+            {
+                worldBounds = renderers[i].bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                worldBounds.Encapsulate(renderers[i].bounds);
+            }
+        }
+
+        if (!hasBounds)
+            return null;
+
+        Vector3 localMin = transform.InverseTransformPoint(worldBounds.min);
+        Vector3 localMax = transform.InverseTransformPoint(worldBounds.max);
+        Bounds localBounds = new Bounds((localMin + localMax) * 0.5f, new Vector3(
+            Mathf.Abs(localMax.x - localMin.x),
+            Mathf.Abs(localMax.y - localMin.y),
+            Mathf.Abs(localMax.z - localMin.z)
+        ));
+
+        return localBounds;
+    }
+
     private void AlignGroundVisualToColliderBottom()
     {
         if (renderers == null || renderers.Length == 0)
@@ -445,6 +603,13 @@ public class EnemyVisual : MonoBehaviour
         if (existing != null)
         {
             Destroy(existing.gameObject);
+        }
+
+        Transform existingMuzzle = transform.Find("EnemyMuzzlePoint");
+
+        if (existingMuzzle != null)
+        {
+            Destroy(existingMuzzle.gameObject);
         }
     }
 }

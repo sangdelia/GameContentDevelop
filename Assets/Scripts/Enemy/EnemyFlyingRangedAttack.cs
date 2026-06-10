@@ -90,9 +90,16 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
         attackTimer = attackInterval;
         chargeStarted = false;
 
-        Vector3 origin = transform.position + transform.forward * 0.7f;
+        Vector3 origin = visual != null
+            ? visual.GetMuzzlePosition()
+            : transform.position + transform.forward * 0.7f;
         Vector3 target = player.position + Vector3.up * 0.85f;
         Vector3 direction = (target - origin).normalized;
+
+        if (visual != null)
+        {
+            visual.PlayFireKick();
+        }
 
         EnemyProjectile.Create(origin, direction, projectileDamage);
     }

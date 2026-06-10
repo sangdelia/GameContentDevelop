@@ -86,9 +86,16 @@ public class EnemyRangedAttack : MonoBehaviour
         attackTimer = attackInterval;
         chargeStarted = false;
 
-        Vector3 origin = transform.position + Vector3.up * 1.1f + direction * 0.8f;
+        Vector3 origin = visual != null
+            ? visual.GetMuzzlePosition()
+            : transform.position + Vector3.up * 1.1f + direction * 0.8f;
         Vector3 target = player.position + Vector3.up * 0.75f;
         Vector3 shootDirection = (target - origin).normalized;
+
+        if (visual != null)
+        {
+            visual.PlayFireKick();
+        }
 
         EnemyProjectile.Create(origin, shootDirection, projectileDamage);
     }
