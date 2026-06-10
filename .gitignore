@@ -40,3 +40,5 @@ desktop.ini
 # Download archives kept outside version control
 Assets/**/*.zip
 Assets/**/*.zip.meta
+Assets/Art/Downloaded/KenneySpaceStationKit/
+Assets/Art/Downloaded/KenneySpaceStationKit.meta

@@ -15,6 +15,8 @@ public class MapChunkManager : MonoBehaviour
 
     [Header("Random Props")]
     [SerializeField] private GameObject[] propPrefabs;
+    [SerializeField] private bool useSciFiResourceProps = true;
+    [SerializeField] private float sciFiPropChance = 0.75f;
     [SerializeField] private int minPropsPerChunk = 3;
     [SerializeField] private int maxPropsPerChunk = 8;
     [SerializeField] private float propSpawnPadding = 5f;
@@ -26,7 +28,28 @@ public class MapChunkManager : MonoBehaviour
     private Vector2Int startChunkCoord;
     private Vector3 startPosition;
     private readonly Dictionary<Vector2Int, GameObject> activeChunks = new();
+    private readonly List<GameObject> sciFiPropPrefabs = new();
     private bool chunksVisible = true;
+
+    private readonly string[] sciFiPropResourceNames =
+    {
+        "computer",
+        "computer-wide",
+        "computer-system",
+        "container",
+        "container-wide",
+        "container-tall",
+        "display-wall",
+        "display-wall-wide",
+        "pipe",
+        "pipe-bend",
+        "pipe-ring-colored",
+        "rail",
+        "rail-narrow",
+        "door-single-closed",
+        "door-double-closed",
+        "skip"
+    };
 
     private void OnValidate()
     {
@@ -44,6 +67,7 @@ public class MapChunkManager : MonoBehaviour
     private void Start()
     {
         ApplyRuntimeDefaults();
+        LoadSciFiProps();
 
         if (player == null)
         {
@@ -269,7 +293,7 @@ public class MapChunkManager : MonoBehaviour
 
     private void GenerateProps(Vector2Int coord, Transform propsRoot)
     {
-        if (propPrefabs == null || propPrefabs.Length == 0)
+        if ((propPrefabs == null || propPrefabs.Length == 0) && sciFiPropPrefabs.Count == 0)
             return;
 
         int seed = worldSeed + coord.x * 73856093 + coord.y * 19349663;
@@ -350,9 +374,15 @@ public class MapChunkManager : MonoBehaviour
 
     private void CreateProp(System.Random random, Transform propsRoot, int index, Vector3 localPosition)
     {
-        GameObject prefab = propPrefabs[random.Next(0, propPrefabs.Length)];
+        GameObject prefab = PickPropPrefab(random);
+
+        if (prefab == null)
+            return;
+
         Quaternion localRotation = Quaternion.Euler(0f, RandomRange(random, 0f, 360f), 0f);
-        float scale = RandomRange(random, 0.85f, 1.25f);
+        float scale = sciFiPropPrefabs.Contains(prefab)
+            ? RandomRange(random, 1.3f, 2.4f)
+            : RandomRange(random, 0.85f, 1.25f);
 
         GameObject prop = Instantiate(prefab, propsRoot);
         prop.name = $"{prefab.name}_{index}";
@@ -361,6 +391,67 @@ public class MapChunkManager : MonoBehaviour
         prop.transform.localScale = Vector3.Scale(prop.transform.localScale, Vector3.one * scale);
 
         PlaceObjectOnGround(prop, 0f);
+        EnsureObstacleCollider(prop);
+    }
+
+    private GameObject PickPropPrefab(System.Random random)
+    {
+        bool useSciFi = useSciFiResourceProps &&
+            sciFiPropPrefabs.Count > 0 &&
+            (propPrefabs == null || propPrefabs.Length == 0 || random.NextDouble() <= sciFiPropChance);
+
+        if (useSciFi)
+        {
+            return sciFiPropPrefabs[random.Next(0, sciFiPropPrefabs.Count)];
+        }
+
+        if (propPrefabs == null || propPrefabs.Length == 0)
+            return null;
+
+        return propPrefabs[random.Next(0, propPrefabs.Length)];
+    }
+
+    private void LoadSciFiProps()
+    {
+        sciFiPropPrefabs.Clear();
+
+        if (!useSciFiResourceProps)
+            return;
+
+        for (int i = 0; i < sciFiPropResourceNames.Length; i++)
+        {
+            GameObject prefab = Resources.Load<GameObject>("Models/SpaceStation/" + sciFiPropResourceNames[i]);
+
+            if (prefab != null)
+            {
+                sciFiPropPrefabs.Add(prefab);
+            }
+        }
+    }
+
+    private void EnsureObstacleCollider(GameObject prop)
+    {
+        Collider existingCollider = prop.GetComponentInChildren<Collider>();
+
+        if (existingCollider != null)
+            return;
+
+        Renderer[] renderers = prop.GetComponentsInChildren<Renderer>();
+
+        if (renderers.Length == 0)
+            return;
+
+        Bounds bounds = renderers[0].bounds;
+
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        BoxCollider collider = prop.AddComponent<BoxCollider>();
+        collider.center = prop.transform.InverseTransformPoint(bounds.center);
+        Vector3 localSize = prop.transform.InverseTransformVector(bounds.size);
+        collider.size = new Vector3(Mathf.Abs(localSize.x), Mathf.Abs(localSize.y), Mathf.Abs(localSize.z));
     }
 
     private void PlaceObjectOnGround(GameObject obj, float groundY)
