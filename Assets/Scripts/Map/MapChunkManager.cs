@@ -32,6 +32,8 @@ public class MapChunkManager : MonoBehaviour
     [SerializeField] private Color floorBaseColor = new Color(0.12f, 0.14f, 0.16f);
     [SerializeField] private Color floorPanelColor = new Color(0.18f, 0.21f, 0.24f);
     [SerializeField] private Color floorAccentColor = new Color(0.05f, 0.9f, 1f);
+    [SerializeField] private bool addSciFiSetPieces = true;
+    [SerializeField] private int setPiecesPerChunk = 4;
 
     private Vector2Int currentChunkCoord;
     private Vector2Int startChunkCoord;
@@ -73,6 +75,7 @@ public class MapChunkManager : MonoBehaviour
         maxPlacementAttempts = Mathf.Max(1, maxPlacementAttempts);
         floorPanelSize = Mathf.Clamp(floorPanelSize, 3f, chunkSize);
         floorLineWidth = Mathf.Clamp(floorLineWidth, 0.02f, 0.35f);
+        setPiecesPerChunk = Mathf.Clamp(setPiecesPerChunk, 0, 12);
     }
 
     private void Start()
@@ -281,6 +284,11 @@ public class MapChunkManager : MonoBehaviour
             CreateSciFiFloorDetails(chunkRoot.transform, coord);
         }
 
+        if (addSciFiSetPieces)
+        {
+            CreateSciFiSetPieces(chunkRoot.transform, coord);
+        }
+
         GameObject propsRoot = new GameObject("Props");
         propsRoot.transform.SetParent(chunkRoot.transform, false);
 
@@ -354,6 +362,94 @@ public class MapChunkManager : MonoBehaviour
         }
     }
 
+    private void CreateSciFiSetPieces(Transform chunkRoot, Vector2Int coord)
+    {
+        GameObject setPieces = new GameObject("SciFiSetPieces");
+        setPieces.transform.SetParent(chunkRoot, false);
+
+        System.Random random = new System.Random(worldSeed + coord.x * 92837111 + coord.y * 689287499);
+        float half = chunkSize * 0.5f;
+
+        for (int i = 0; i < setPiecesPerChunk; i++)
+        {
+            float x = RandomRange(random, -half + 6f, half - 6f);
+            float z = RandomRange(random, -half + 6f, half - 6f);
+            Vector3 position = new Vector3(x, 0f, z);
+
+            if (random.NextDouble() < 0.45)
+            {
+                CreateTechPlate(setPieces.transform, position, random);
+            }
+            else if (random.NextDouble() < 0.65)
+            {
+                CreateLightBeacon(setPieces.transform, position, random);
+            }
+            else
+            {
+                CreateServiceRail(setPieces.transform, position, random);
+            }
+        }
+    }
+
+    private void CreateTechPlate(Transform parent, Vector3 localPosition, System.Random random)
+    {
+        GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        plate.name = "Floor_TechPlate";
+        plate.transform.SetParent(parent, false);
+        plate.transform.localPosition = localPosition + Vector3.up * 0.055f;
+        plate.transform.localRotation = Quaternion.Euler(0f, RandomRange(random, 0f, 360f), 0f);
+        plate.transform.localScale = new Vector3(RandomRange(random, 2.4f, 5.2f), 0.08f, RandomRange(random, 1.5f, 3.1f));
+        RemoveCollider(plate);
+
+        Renderer renderer = plate.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            renderer.material = CreateSciFiMaterial(new Color(0.08f, 0.1f, 0.12f), floorAccentColor * 0.28f);
+        }
+
+        CreateFloorStrip(parent, localPosition + Vector3.up * 0.12f, new Vector3(plate.transform.localScale.x * 0.62f, 0.025f, floorLineWidth * 1.2f), true);
+    }
+
+    private void CreateLightBeacon(Transform parent, Vector3 localPosition, System.Random random)
+    {
+        GameObject beacon = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        beacon.name = "Floor_LightBeacon";
+        beacon.transform.SetParent(parent, false);
+        beacon.transform.localPosition = localPosition + Vector3.up * 0.25f;
+        beacon.transform.localRotation = Quaternion.identity;
+        beacon.transform.localScale = new Vector3(0.22f, 0.5f, 0.22f);
+        RemoveCollider(beacon);
+
+        Renderer renderer = beacon.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            renderer.material = CreateSciFiMaterial(floorAccentColor * 0.85f, floorAccentColor * 2.1f);
+        }
+
+        Light light = beacon.AddComponent<Light>();
+        light.type = LightType.Point;
+        light.color = floorAccentColor;
+        light.range = 4.5f;
+        light.intensity = 0.65f;
+    }
+
+    private void CreateServiceRail(Transform parent, Vector3 localPosition, System.Random random)
+    {
+        GameObject rail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        rail.name = "Floor_ServiceRail";
+        rail.transform.SetParent(parent, false);
+        rail.transform.localPosition = localPosition + Vector3.up * 0.12f;
+        rail.transform.localRotation = Quaternion.Euler(0f, random.NextDouble() > 0.5 ? 0f : 90f, 0f);
+        rail.transform.localScale = new Vector3(RandomRange(random, 2.2f, 4.8f), 0.18f, 0.18f);
+        RemoveCollider(rail);
+
+        Renderer renderer = rail.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            renderer.material = CreateSciFiMaterial(floorPanelColor * 0.75f, Color.black);
+        }
+    }
+
     private void CreateFloorStrip(Transform parent, Vector3 localPosition, Vector3 localScale, bool accent)
     {
         GameObject strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -377,6 +473,16 @@ public class MapChunkManager : MonoBehaviour
             Color color = accent ? floorAccentColor : floorPanelColor * 0.62f;
             Color emission = accent ? floorAccentColor * 1.8f : Color.black;
             renderer.material = CreateSciFiMaterial(color, emission);
+        }
+    }
+
+    private void RemoveCollider(GameObject target)
+    {
+        Collider collider = target.GetComponent<Collider>();
+
+        if (collider != null)
+        {
+            Destroy(collider);
         }
     }
 

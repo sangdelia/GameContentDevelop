@@ -105,7 +105,9 @@ public class SpaceEnvironmentController : MonoBehaviour
         starField = starObject.transform;
 
         ParticleSystem particles = starObject.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         ParticleSystem.MainModule main = particles.main;
+        main.playOnAwake = false;
         main.loop = false;
         main.startLifetime = 999999f;
         main.startSpeed = 0f;
@@ -125,6 +127,7 @@ public class SpaceEnvironmentController : MonoBehaviour
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
 
         EmitSkyDomeStars(particles);
+        particles.Play();
     }
 
     private void EmitSkyDomeStars(ParticleSystem particles)

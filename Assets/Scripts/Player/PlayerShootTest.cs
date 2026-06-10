@@ -12,6 +12,7 @@ public class PlayerShootTest : MonoBehaviour
     [SerializeField] private float range = 100f;
     [SerializeField] private float shotsPerSecond = 4.5f;
     [SerializeField] private bool automaticFire = true;
+    [SerializeField] private bool logShotDebug = false;
 
     [Header("Ray Visual")]
     [SerializeField] private float rayVisibleTime = 0.05f;
@@ -111,7 +112,10 @@ public class PlayerShootTest : MonoBehaviour
         {
             end = hit.point;
 
-            Debug.Log("Hit object: " + hit.collider.name);
+            if (logShotDebug)
+            {
+                Debug.Log("Hit object: " + hit.collider.name);
+            }
 
             EnemyHealth enemy = hit.collider.GetComponentInParent<EnemyHealth>();
 
@@ -119,15 +123,23 @@ public class PlayerShootTest : MonoBehaviour
             {
                 GameVfx.SpawnHitSpark(hit.point, hit.normal, true);
                 enemy.TakeDamage(damage);
-                Debug.Log("Enemy hit.");
+
+                if (logShotDebug)
+                {
+                    Debug.Log("Enemy hit.");
+                }
             }
             else
             {
                 GameVfx.SpawnHitSpark(hit.point, hit.normal, false);
-                Debug.LogWarning("Hit object has no EnemyHealth: " + hit.collider.name);
+
+                if (logShotDebug)
+                {
+                    Debug.Log("Hit object has no EnemyHealth: " + hit.collider.name);
+                }
             }
         }
-        else
+        else if (logShotDebug)
         {
             Debug.Log("Shot missed.");
         }

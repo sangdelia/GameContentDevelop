@@ -62,7 +62,9 @@ public static class GameVfx
         burstObject.transform.position = position;
 
         ParticleSystem particles = burstObject.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         ParticleSystem.MainModule main = particles.main;
+        main.playOnAwake = false;
         main.duration = 0.04f;
         main.loop = false;
         main.startLifetime = lifetime;
@@ -82,6 +84,7 @@ public static class GameVfx
         renderer.material = CreateMaterial(color, 1.8f);
 
         particles.Emit(count);
+        particles.Play();
         Object.Destroy(burstObject, lifetime + 0.15f);
     }
 
