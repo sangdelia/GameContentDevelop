@@ -10,8 +10,6 @@ public class EnemyVisual : MonoBehaviour
         public Quaternion BaseLocalRotation;
         public float Phase;
         public float Swing;
-        public float Lift;
-        public bool Translate;
     }
 
     public enum EnemyVisualType
@@ -251,9 +249,8 @@ public class EnemyVisual : MonoBehaviour
             }
             else
             {
-                float sway = Mathf.Sin(walkCycle);
                 visualRoot.localPosition = baseVisualLocalPosition;
-                visualRoot.localRotation = Quaternion.Euler(0f, 0f, sway * 2.2f);
+                visualRoot.localRotation = Quaternion.identity;
                 visualRoot.localScale = Vector3.one;
                 AlignGroundVisualToColliderBottom();
             }
@@ -295,20 +292,10 @@ public class EnemyVisual : MonoBehaviour
 
             float phaseTime = walkCycle + part.Phase;
             float stride = Mathf.Sin(phaseTime);
-            float footLift = Mathf.Max(0f, Mathf.Sin(phaseTime + Mathf.PI * 0.5f));
             float swing = stride * part.Swing * movementAmount;
-            float twist = Mathf.Cos(phaseTime) * part.Swing * 0.16f * movementAmount;
 
-            Quaternion targetRotation = part.BaseLocalRotation * Quaternion.Euler(swing, twist, 0f);
-            Vector3 targetPosition = part.BaseLocalPosition;
-
-            if (part.Translate)
-            {
-                targetPosition += new Vector3(0f, footLift * part.Lift * movementAmount, -stride * part.Lift * 0.35f * movementAmount);
-            }
-
-            part.Transform.localPosition = targetPosition;
-            part.Transform.localRotation = targetRotation;
+            part.Transform.localPosition = part.BaseLocalPosition;
+            part.Transform.localRotation = part.BaseLocalRotation * Quaternion.Euler(swing, 0f, 0f);
         }
 
         visualRoot.localPosition = baseVisualLocalPosition;
@@ -511,22 +498,49 @@ public class EnemyVisual : MonoBehaviour
             return;
 
         List<AnimatedPart> parts = new List<AnimatedPart>();
-        Transform scanRoot = importedLegRigRoot != null ? importedLegRigRoot : visualRoot;
-        Transform[] children = scanRoot.GetComponentsInChildren<Transform>(true);
         int legIndex = 0;
+
+        if (importedLegRigRoot != null)
+        {
+            for (int i = 0; i < importedLegRigRoot.childCount; i++)
+            {
+                Transform child = importedLegRigRoot.GetChild(i);
+
+                if (child == null || !child.name.StartsWith("ImportedLegPivot_"))
+                    continue;
+
+                float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.35f;
+
+                parts.Add(new AnimatedPart
+                {
+                    Transform = child,
+                    BaseLocalPosition = child.localPosition,
+                    BaseLocalRotation = child.localRotation,
+                    Phase = phase,
+                    Swing = 28f
+                });
+
+                legIndex++;
+            }
+
+            if (parts.Count > 0)
+            {
+                groundAnimatedParts = parts.ToArray();
+            }
+
+            return;
+        }
+
+        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
 
         for (int i = 0; i < children.Length; i++)
         {
             Transform child = children[i];
 
-            if (child == null || child == scanRoot || child == visualRoot || child == chargeOrb || child == muzzlePoint)
+            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint)
                 continue;
 
             string lowerName = child.name.ToLowerInvariant();
-
-            if (lowerName.Contains("ik") || lowerName.Contains("pt") || lowerName.Contains("mesh"))
-                continue;
-
             bool isFoot = lowerName.Contains("foot");
             bool isLeg = lowerName.Contains("leg") && !lowerName.EndsWith("_legs");
 
@@ -535,7 +549,6 @@ public class EnemyVisual : MonoBehaviour
 
             float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.55f;
             float swing = visualType == EnemyVisualType.Melee ? 20f : 16f;
-            float lift = visualType == EnemyVisualType.Melee ? 0.11f : 0.08f;
 
             parts.Add(new AnimatedPart
             {
@@ -543,9 +556,7 @@ public class EnemyVisual : MonoBehaviour
                 BaseLocalPosition = child.localPosition,
                 BaseLocalRotation = child.localRotation,
                 Phase = phase,
-                Swing = swing,
-                Lift = lift,
-                Translate = isFoot || isLeg
+                Swing = swing
             });
 
             legIndex++;
@@ -684,7 +695,7 @@ public class EnemyVisual : MonoBehaviour
         Transform pivot = pivotObject.transform;
         pivot.SetParent(importedLegRigRoot, false);
         pivot.position = pivotWorldPosition;
-        pivot.rotation = legRoot.rotation;
+        pivot.rotation = visualRoot.rotation;
         pivot.localScale = Vector3.one;
 
         legRoot.SetParent(pivot, true);
