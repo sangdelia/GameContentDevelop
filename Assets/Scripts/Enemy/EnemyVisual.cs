@@ -15,7 +15,11 @@ public class EnemyVisual : MonoBehaviour
     private Transform rightPart;
     private Transform chargeOrb;
     private Renderer[] renderers;
+    private EnemyVisualType visualType;
     private Color baseColor;
+    private Vector3 baseVisualLocalPosition;
+    private Vector3 previousPosition;
+    private float walkCycle;
     private float bobSeed;
     private float chargeTimer;
     private float chargeDuration;
@@ -51,12 +55,14 @@ public class EnemyVisual : MonoBehaviour
 
     private void Build(EnemyVisualType type)
     {
+        visualType = type;
         ClearExistingVisual();
         HideSourceRenderers();
 
         visualRoot = new GameObject("EnemyVisualRoot").transform;
         visualRoot.SetParent(transform, false);
         bobSeed = Random.Range(0f, 100f);
+        previousPosition = transform.position;
 
         bool importedModelApplied = TryBuildImportedEnemyModel(type);
 
@@ -133,6 +139,13 @@ public class EnemyVisual : MonoBehaviour
         chargeOrb = CreatePart("AttackChargeOrb", PrimitiveType.Sphere, new Vector3(0f, 0.35f, 0.82f), Vector3.one * 0.22f, Color.white);
         chargeOrb.gameObject.SetActive(false);
         renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+
+        if (visualType != EnemyVisualType.Flying)
+        {
+            AlignGroundVisualToColliderBottom();
+        }
+
+        baseVisualLocalPosition = visualRoot.localPosition;
     }
 
     private void Update()
@@ -140,7 +153,7 @@ public class EnemyVisual : MonoBehaviour
         if (visualRoot == null)
             return;
 
-        visualRoot.localPosition = Vector3.up * (Mathf.Sin(Time.time * 4f + bobSeed) * 0.035f);
+        AnimateMovement();
 
         if (leftPart != null)
         {
@@ -153,6 +166,48 @@ public class EnemyVisual : MonoBehaviour
         }
 
         UpdateCharge();
+    }
+
+    private void AnimateMovement()
+    {
+        Vector3 currentPosition = transform.position;
+        Vector3 flatDelta = currentPosition - previousPosition;
+        flatDelta.y = 0f;
+        float speed = Time.deltaTime <= 0f ? 0f : flatDelta.magnitude / Time.deltaTime;
+        previousPosition = currentPosition;
+
+        if (visualType == EnemyVisualType.Flying)
+        {
+            float bob = Mathf.Sin(Time.time * 4f + bobSeed) * 0.1f;
+            visualRoot.localPosition = baseVisualLocalPosition + Vector3.up * bob;
+            visualRoot.localRotation = Quaternion.Euler(
+                Mathf.Sin(Time.time * 2.8f + bobSeed) * 3f,
+                0f,
+                Mathf.Sin(Time.time * 3.5f + bobSeed) * 5f
+            );
+            visualRoot.localScale = Vector3.one;
+            return;
+        }
+
+        if (speed > 0.05f)
+        {
+            walkCycle += Time.deltaTime * Mathf.Lerp(4f, 9f, Mathf.Clamp01(speed / 3f));
+            float sway = Mathf.Sin(walkCycle);
+            float compress = Mathf.Abs(sway) * 0.035f;
+
+            visualRoot.localPosition = baseVisualLocalPosition;
+            visualRoot.localRotation = Quaternion.Euler(compress * 24f, 0f, sway * 4.5f);
+            visualRoot.localScale = new Vector3(1f + compress * 0.35f, 1f - compress, 1f + compress * 0.2f);
+            AlignGroundVisualToColliderBottom();
+        }
+        else
+        {
+            float idle = Mathf.Sin(Time.time * 1.8f + bobSeed) * 1.2f;
+            visualRoot.localPosition = baseVisualLocalPosition;
+            visualRoot.localRotation = Quaternion.Euler(0f, 0f, idle);
+            visualRoot.localScale = Vector3.one;
+            AlignGroundVisualToColliderBottom();
+        }
     }
 
     private void UpdateCharge()
@@ -290,6 +345,43 @@ public class EnemyVisual : MonoBehaviour
         leftPart = null;
         rightPart = null;
         return true;
+    }
+
+    private void AlignGroundVisualToColliderBottom()
+    {
+        if (renderers == null || renderers.Length == 0)
+            return;
+
+        Bounds visualBounds = renderers[0].bounds;
+
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            visualBounds.Encapsulate(renderers[i].bounds);
+        }
+
+        float targetBottomWorldY = GetColliderBottomWorldY();
+        float offsetY = targetBottomWorldY - visualBounds.min.y;
+        visualRoot.position += Vector3.up * offsetY;
+    }
+
+    private float GetColliderBottomWorldY()
+    {
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+
+        if (capsule != null)
+        {
+            Vector3 localBottom = capsule.center + Vector3.down * (capsule.height * 0.5f);
+            return transform.TransformPoint(localBottom).y;
+        }
+
+        Collider collider = GetComponent<Collider>();
+
+        if (collider != null)
+        {
+            return collider.bounds.min.y;
+        }
+
+        return transform.position.y - 1f;
     }
 
     private void ApplyRendererMaterial(Renderer targetRenderer, Color tint, bool useLargeEnemyTextures)
