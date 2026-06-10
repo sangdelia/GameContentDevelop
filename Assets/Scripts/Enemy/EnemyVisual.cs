@@ -27,6 +27,7 @@ public class EnemyVisual : MonoBehaviour
     private Transform rightPart;
     private Transform chargeOrb;
     private Transform muzzlePoint;
+    private Transform proceduralLegRoot;
     private Renderer[] renderers;
     private AnimatedPart[] groundAnimatedParts;
     private EnemyVisualType visualType;
@@ -180,12 +181,23 @@ public class EnemyVisual : MonoBehaviour
         chargeOrb.gameObject.SetActive(false);
         renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
 
+        if (importedModelApplied && visualType != EnemyVisualType.Flying)
+        {
+            HideImportedGroundAppendages();
+            renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+        }
+
         if (visualType != EnemyVisualType.Flying)
         {
             AlignGroundVisualToColliderBottom();
         }
 
         visualLocalBounds = GetVisualLocalBounds();
+        if (importedModelApplied && visualType != EnemyVisualType.Flying)
+        {
+            CreateProceduralLegRig();
+        }
+
         ConfigureColliderToVisualBounds();
         CreateMuzzlePoint();
         CacheGroundAnimatedParts();
@@ -505,14 +517,15 @@ public class EnemyVisual : MonoBehaviour
             return;
 
         List<AnimatedPart> parts = new List<AnimatedPart>();
-        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
+        Transform scanRoot = proceduralLegRoot != null ? proceduralLegRoot : visualRoot;
+        Transform[] children = scanRoot.GetComponentsInChildren<Transform>(true);
         int legIndex = 0;
 
         for (int i = 0; i < children.Length; i++)
         {
             Transform child = children[i];
 
-            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint)
+            if (child == null || child == scanRoot || child == visualRoot || child == chargeOrb || child == muzzlePoint)
                 continue;
 
             string lowerName = child.name.ToLowerInvariant();
@@ -547,6 +560,113 @@ public class EnemyVisual : MonoBehaviour
         if (parts.Count > 0)
         {
             groundAnimatedParts = parts.ToArray();
+        }
+    }
+
+    private void HideImportedGroundAppendages()
+    {
+        Renderer[] modelRenderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < modelRenderers.Length; i++)
+        {
+            Renderer targetRenderer = modelRenderers[i];
+
+            if (targetRenderer == null || targetRenderer.transform == chargeOrb)
+                continue;
+
+            if (IsAppendageTransform(targetRenderer.transform))
+            {
+                targetRenderer.enabled = false;
+            }
+        }
+    }
+
+    private bool IsAppendageTransform(Transform target)
+    {
+        Transform current = target;
+
+        while (current != null && current != visualRoot)
+        {
+            string lowerName = current.name.ToLowerInvariant();
+
+            if (lowerName.Contains("leg") ||
+                lowerName.Contains("foot") ||
+                lowerName.Contains("arm") ||
+                lowerName.Contains("shoulder") ||
+                lowerName.Contains("piston"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private void CreateProceduralLegRig()
+    {
+        if (!visualLocalBounds.HasValue)
+            return;
+
+        Bounds bounds = visualLocalBounds.Value;
+        GameObject legRootObject = new GameObject("ProceduralLegsRoot");
+        proceduralLegRoot = legRootObject.transform;
+        proceduralLegRoot.SetParent(visualRoot, false);
+
+        int legPairs = visualType == EnemyVisualType.Melee ? 3 : 2;
+        float sideOffset = Mathf.Max(0.28f, bounds.extents.x * 0.72f);
+        float length = Mathf.Clamp(bounds.size.y * 0.42f, 0.28f, 0.75f);
+        float thickness = visualType == EnemyVisualType.Melee ? 0.12f : 0.15f;
+        float bottomY = bounds.min.y + length * 0.45f;
+        float startZ = bounds.min.z + bounds.size.z * 0.24f;
+        float endZ = bounds.max.z - bounds.size.z * 0.24f;
+
+        for (int i = 0; i < legPairs; i++)
+        {
+            float t = legPairs == 1 ? 0.5f : i / (float)(legPairs - 1);
+            float z = Mathf.Lerp(startZ, endZ, t);
+            CreateProceduralLeg($"Left_Leg_{i + 1}", new Vector3(-sideOffset, bottomY + length * 0.5f, z), thickness, length);
+            CreateProceduralLeg($"Right_Leg_{i + 1}", new Vector3(sideOffset, bottomY + length * 0.5f, z), thickness, length);
+        }
+
+        renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+    }
+
+    private void CreateProceduralLeg(string legName, Vector3 localPosition, float thickness, float length)
+    {
+        GameObject legPivot = new GameObject(legName);
+        legPivot.transform.SetParent(proceduralLegRoot, false);
+        legPivot.transform.localPosition = localPosition;
+        legPivot.transform.localRotation = Quaternion.identity;
+        legPivot.transform.localScale = Vector3.one;
+
+        GameObject leg = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        leg.name = "LegMesh";
+        leg.transform.SetParent(legPivot.transform, false);
+        leg.transform.localPosition = Vector3.down * (length * 0.5f);
+        leg.transform.localRotation = Quaternion.identity;
+        leg.transform.localScale = new Vector3(thickness, length * 0.5f, thickness);
+
+        Collider collider = leg.GetComponent<Collider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        Renderer renderer = leg.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Material material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            material.color = Color.Lerp(new Color(0.08f, 0.09f, 0.1f), baseColor, 0.22f);
+
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", baseColor * 0.18f);
+            }
+
+            renderer.material = material;
         }
     }
 
