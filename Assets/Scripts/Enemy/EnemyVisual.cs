@@ -502,70 +502,72 @@ public class EnemyVisual : MonoBehaviour
 
         if (importedLegRigRoot != null)
         {
-            for (int i = 0; i < importedLegRigRoot.childCount; i++)
-            {
-                Transform child = importedLegRigRoot.GetChild(i);
-
-                if (child == null || !child.name.StartsWith("ImportedLegPivot_"))
-                    continue;
-
-                float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.35f;
-
-                parts.Add(new AnimatedPart
-                {
-                    Transform = child,
-                    BaseLocalPosition = child.localPosition,
-                    BaseLocalRotation = child.localRotation,
-                    Phase = phase,
-                    Swing = 28f
-                });
-
-                legIndex++;
-            }
-
-            if (parts.Count > 0)
-            {
-                groundAnimatedParts = parts.ToArray();
-            }
-
-            return;
+            CacheImportedLegPivots(parts, ref legIndex);
         }
-
-        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
-
-        for (int i = 0; i < children.Length; i++)
+        else
         {
-            Transform child = children[i];
-
-            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint)
-                continue;
-
-            string lowerName = child.name.ToLowerInvariant();
-            bool isFoot = lowerName.Contains("foot");
-            bool isLeg = lowerName.Contains("leg") && !lowerName.EndsWith("_legs");
-
-            if (!isFoot && !isLeg)
-                continue;
-
-            float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.55f;
-            float swing = visualType == EnemyVisualType.Melee ? 20f : 16f;
-
-            parts.Add(new AnimatedPart
-            {
-                Transform = child,
-                BaseLocalPosition = child.localPosition,
-                BaseLocalRotation = child.localRotation,
-                Phase = phase,
-                Swing = swing
-            });
-
-            legIndex++;
+            CacheImportedLegBones(parts, ref legIndex);
         }
 
         if (parts.Count > 0)
         {
             groundAnimatedParts = parts.ToArray();
         }
+    }
+
+    private void CacheImportedLegPivots(List<AnimatedPart> parts, ref int legIndex)
+    {
+        for (int i = 0; i < importedLegRigRoot.childCount; i++)
+        {
+            Transform child = importedLegRigRoot.GetChild(i);
+
+            if (child == null || !child.name.StartsWith("ImportedLegPivot_"))
+                continue;
+
+            AddLegAnimatedPart(parts, child, legIndex, 28f);
+            legIndex++;
+        }
+
+        if (parts.Count == 0)
+        {
+            CacheImportedLegBones(parts, ref legIndex);
+        }
+    }
+
+    private void CacheImportedLegBones(List<AnimatedPart> parts, ref int legIndex)
+    {
+        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
+
+        for (int i = 0; i < children.Length; i++)
+        {
+            Transform child = children[i];
+
+            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint || child == importedLegRigRoot)
+                continue;
+
+            if (!IsImportedLegCandidate(child))
+                continue;
+
+            if (HasImportedLegAncestor(child))
+                continue;
+
+            AddLegAnimatedPart(parts, child, legIndex, visualType == EnemyVisualType.Melee ? 24f : 20f);
+            legIndex++;
+        }
+    }
+
+    private void AddLegAnimatedPart(List<AnimatedPart> parts, Transform target, int legIndex, float swing)
+    {
+        float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.42f;
+
+        parts.Add(new AnimatedPart
+        {
+            Transform = target,
+            BaseLocalPosition = target.localPosition,
+            BaseLocalRotation = target.localRotation,
+            Phase = phase,
+            Swing = swing
+        });
     }
 
     private void HideImportedNonLegAppendages()
@@ -651,10 +653,6 @@ public class EnemyVisual : MonoBehaviour
             if (HasImportedLegAncestor(child))
                 continue;
 
-            Renderer[] childRenderers = child.GetComponentsInChildren<Renderer>(true);
-            if (childRenderers.Length == 0)
-                continue;
-
             legRoots.Add(child);
         }
 
@@ -668,7 +666,15 @@ public class EnemyVisual : MonoBehaviour
         if (lowerName.Contains("ik") || lowerName.Contains("pt") || lowerName.Contains("mesh") || lowerName.EndsWith("_legs"))
             return false;
 
-        return lowerName.Contains("leg") || lowerName.Contains("foot");
+        if (visualType == EnemyVisualType.Melee)
+        {
+            return lowerName.StartsWith("leg") || lowerName.Contains("_leg") || lowerName.Contains("foot");
+        }
+
+        return lowerName.StartsWith("front_leg") ||
+            lowerName.StartsWith("back_leg") ||
+            lowerName.Contains("_leg") ||
+            lowerName.Contains("foot");
     }
 
     private bool HasImportedLegAncestor(Transform target)
@@ -688,8 +694,7 @@ public class EnemyVisual : MonoBehaviour
 
     private void WrapImportedLegWithPivot(Transform legRoot, int index)
     {
-        Bounds bounds = GetRendererWorldBounds(legRoot);
-        Vector3 pivotWorldPosition = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+        Vector3 pivotWorldPosition = legRoot.position;
 
         GameObject pivotObject = new GameObject($"ImportedLegPivot_{index + 1}_{legRoot.name}");
         Transform pivot = pivotObject.transform;

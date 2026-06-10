@@ -9,6 +9,7 @@ public class SpaceEnvironmentController : MonoBehaviour
     [SerializeField] private Color keyLightColor = new Color(0.62f, 0.78f, 1f);
     [SerializeField] private int starCount = 360;
     [SerializeField] private float starRadius = 180f;
+    [SerializeField] private float starMinHeight = 35f;
 
     private Transform starField;
     private Camera targetCamera;
@@ -117,15 +118,46 @@ public class SpaceEnvironmentController : MonoBehaviour
         emission.enabled = false;
 
         ParticleSystem.ShapeModule shape = particles.shape;
-        shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = starRadius;
-        shape.radiusThickness = 0.08f;
+        shape.enabled = false;
 
         ParticleSystemRenderer renderer = starObject.GetComponent<ParticleSystemRenderer>();
         renderer.material = CreateStarMaterial();
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
 
-        particles.Emit(starCount);
+        EmitSkyDomeStars(particles);
+    }
+
+    private void EmitSkyDomeStars(ParticleSystem particles)
+    {
+        System.Random random = new System.Random(7301);
+
+        for (int i = 0; i < starCount; i++)
+        {
+            float angle = RandomRange(random, 0f, Mathf.PI * 2f);
+            float height = RandomRange(random, starMinHeight, starRadius);
+            float ringRadius = Mathf.Sqrt(Mathf.Max(0f, starRadius * starRadius - height * height));
+            float radius = RandomRange(random, ringRadius * 0.35f, ringRadius);
+
+            Vector3 position = new Vector3(
+                Mathf.Cos(angle) * radius,
+                height,
+                Mathf.Sin(angle) * radius
+            );
+
+            ParticleSystem.EmitParams emitParams = new ParticleSystem.EmitParams
+            {
+                position = position,
+                startSize = RandomRange(random, 0.035f, 0.095f),
+                startColor = Color.Lerp(new Color(0.45f, 0.72f, 1f), Color.white, (float)random.NextDouble())
+            };
+
+            particles.Emit(emitParams, 1);
+        }
+    }
+
+    private float RandomRange(System.Random random, float min, float max)
+    {
+        return min + (float)random.NextDouble() * (max - min);
     }
 
     private Material CreateStarMaterial()
