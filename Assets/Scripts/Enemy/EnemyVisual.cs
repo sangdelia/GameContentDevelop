@@ -27,7 +27,7 @@ public class EnemyVisual : MonoBehaviour
     private Transform rightPart;
     private Transform chargeOrb;
     private Transform muzzlePoint;
-    private Transform proceduralLegRoot;
+    private Transform importedLegRigRoot;
     private Renderer[] renderers;
     private AnimatedPart[] groundAnimatedParts;
     private EnemyVisualType visualType;
@@ -181,12 +181,6 @@ public class EnemyVisual : MonoBehaviour
         chargeOrb.gameObject.SetActive(false);
         renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
 
-        if (importedModelApplied && visualType != EnemyVisualType.Flying)
-        {
-            HideImportedGroundAppendages();
-            renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
-        }
-
         if (visualType != EnemyVisualType.Flying)
         {
             AlignGroundVisualToColliderBottom();
@@ -195,7 +189,7 @@ public class EnemyVisual : MonoBehaviour
         visualLocalBounds = GetVisualLocalBounds();
         if (importedModelApplied && visualType != EnemyVisualType.Flying)
         {
-            CreateProceduralLegRig();
+            BuildImportedLegRig();
         }
 
         ConfigureColliderToVisualBounds();
@@ -517,7 +511,7 @@ public class EnemyVisual : MonoBehaviour
             return;
 
         List<AnimatedPart> parts = new List<AnimatedPart>();
-        Transform scanRoot = proceduralLegRoot != null ? proceduralLegRoot : visualRoot;
+        Transform scanRoot = importedLegRigRoot != null ? importedLegRigRoot : visualRoot;
         Transform[] children = scanRoot.GetComponentsInChildren<Transform>(true);
         int legIndex = 0;
 
@@ -563,7 +557,7 @@ public class EnemyVisual : MonoBehaviour
         }
     }
 
-    private void HideImportedGroundAppendages()
+    private void HideImportedNonLegAppendages()
     {
         Renderer[] modelRenderers = visualRoot.GetComponentsInChildren<Renderer>(true);
 
@@ -574,14 +568,14 @@ public class EnemyVisual : MonoBehaviour
             if (targetRenderer == null || targetRenderer.transform == chargeOrb)
                 continue;
 
-            if (IsAppendageTransform(targetRenderer.transform))
+            if (IsNonLegAppendageTransform(targetRenderer.transform))
             {
                 targetRenderer.enabled = false;
             }
         }
     }
 
-    private bool IsAppendageTransform(Transform target)
+    private bool IsNonLegAppendageTransform(Transform target)
     {
         Transform current = target;
 
@@ -589,9 +583,12 @@ public class EnemyVisual : MonoBehaviour
         {
             string lowerName = current.name.ToLowerInvariant();
 
-            if (lowerName.Contains("leg") ||
-                lowerName.Contains("foot") ||
-                lowerName.Contains("arm") ||
+            if ((lowerName.Contains("leg") && !lowerName.EndsWith("_legs")) || lowerName.Contains("foot"))
+            {
+                return false;
+            }
+
+            if (lowerName.Contains("arm") ||
                 lowerName.Contains("shoulder") ||
                 lowerName.Contains("piston"))
             {
@@ -604,70 +601,112 @@ public class EnemyVisual : MonoBehaviour
         return false;
     }
 
-    private void CreateProceduralLegRig()
+    private void BuildImportedLegRig()
     {
         if (!visualLocalBounds.HasValue)
             return;
 
-        Bounds bounds = visualLocalBounds.Value;
-        GameObject legRootObject = new GameObject("ProceduralLegsRoot");
-        proceduralLegRoot = legRootObject.transform;
-        proceduralLegRoot.SetParent(visualRoot, false);
+        HideImportedNonLegAppendages();
 
-        int legPairs = visualType == EnemyVisualType.Melee ? 3 : 2;
-        float sideOffset = Mathf.Max(0.28f, bounds.extents.x * 0.72f);
-        float length = Mathf.Clamp(bounds.size.y * 0.42f, 0.28f, 0.75f);
-        float thickness = visualType == EnemyVisualType.Melee ? 0.12f : 0.15f;
-        float bottomY = bounds.min.y + length * 0.45f;
-        float startZ = bounds.min.z + bounds.size.z * 0.24f;
-        float endZ = bounds.max.z - bounds.size.z * 0.24f;
+        GameObject rigRootObject = new GameObject("ImportedLegRigRoot");
+        importedLegRigRoot = rigRootObject.transform;
+        importedLegRigRoot.SetParent(visualRoot, false);
 
-        for (int i = 0; i < legPairs; i++)
+        List<Transform> legRoots = CollectImportedLegRoots();
+
+        for (int i = 0; i < legRoots.Count; i++)
         {
-            float t = legPairs == 1 ? 0.5f : i / (float)(legPairs - 1);
-            float z = Mathf.Lerp(startZ, endZ, t);
-            CreateProceduralLeg($"Left_Leg_{i + 1}", new Vector3(-sideOffset, bottomY + length * 0.5f, z), thickness, length);
-            CreateProceduralLeg($"Right_Leg_{i + 1}", new Vector3(sideOffset, bottomY + length * 0.5f, z), thickness, length);
+            WrapImportedLegWithPivot(legRoots[i], i);
         }
 
         renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
     }
 
-    private void CreateProceduralLeg(string legName, Vector3 localPosition, float thickness, float length)
+    private List<Transform> CollectImportedLegRoots()
     {
-        GameObject legPivot = new GameObject(legName);
-        legPivot.transform.SetParent(proceduralLegRoot, false);
-        legPivot.transform.localPosition = localPosition;
-        legPivot.transform.localRotation = Quaternion.identity;
-        legPivot.transform.localScale = Vector3.one;
+        List<Transform> legRoots = new List<Transform>();
+        Transform[] children = visualRoot.GetComponentsInChildren<Transform>(true);
 
-        GameObject leg = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        leg.name = "LegMesh";
-        leg.transform.SetParent(legPivot.transform, false);
-        leg.transform.localPosition = Vector3.down * (length * 0.5f);
-        leg.transform.localRotation = Quaternion.identity;
-        leg.transform.localScale = new Vector3(thickness, length * 0.5f, thickness);
-
-        Collider collider = leg.GetComponent<Collider>();
-        if (collider != null)
+        for (int i = 0; i < children.Length; i++)
         {
-            Destroy(collider);
+            Transform child = children[i];
+
+            if (child == null || child == visualRoot || child == chargeOrb || child == muzzlePoint)
+                continue;
+
+            if (!IsImportedLegCandidate(child))
+                continue;
+
+            if (HasImportedLegAncestor(child))
+                continue;
+
+            Renderer[] childRenderers = child.GetComponentsInChildren<Renderer>(true);
+            if (childRenderers.Length == 0)
+                continue;
+
+            legRoots.Add(child);
         }
 
-        Renderer renderer = leg.GetComponent<Renderer>();
-        if (renderer != null)
+        return legRoots;
+    }
+
+    private bool IsImportedLegCandidate(Transform target)
+    {
+        string lowerName = target.name.ToLowerInvariant();
+
+        if (lowerName.Contains("ik") || lowerName.Contains("pt") || lowerName.Contains("mesh") || lowerName.EndsWith("_legs"))
+            return false;
+
+        return lowerName.Contains("leg") || lowerName.Contains("foot");
+    }
+
+    private bool HasImportedLegAncestor(Transform target)
+    {
+        Transform current = target.parent;
+
+        while (current != null && current != visualRoot)
         {
-            Material material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            material.color = Color.Lerp(new Color(0.08f, 0.09f, 0.1f), baseColor, 0.22f);
+            if (IsImportedLegCandidate(current))
+                return true;
 
-            if (material.HasProperty("_EmissionColor"))
-            {
-                material.EnableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", baseColor * 0.18f);
-            }
-
-            renderer.material = material;
+            current = current.parent;
         }
+
+        return false;
+    }
+
+    private void WrapImportedLegWithPivot(Transform legRoot, int index)
+    {
+        Bounds bounds = GetRendererWorldBounds(legRoot);
+        Vector3 pivotWorldPosition = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+
+        GameObject pivotObject = new GameObject($"ImportedLegPivot_{index + 1}_{legRoot.name}");
+        Transform pivot = pivotObject.transform;
+        pivot.SetParent(importedLegRigRoot, false);
+        pivot.position = pivotWorldPosition;
+        pivot.rotation = legRoot.rotation;
+        pivot.localScale = Vector3.one;
+
+        legRoot.SetParent(pivot, true);
+    }
+
+    private Bounds GetRendererWorldBounds(Transform root)
+    {
+        Renderer[] targetRenderers = root.GetComponentsInChildren<Renderer>(true);
+
+        if (targetRenderers.Length == 0)
+        {
+            return new Bounds(root.position, Vector3.one * 0.2f);
+        }
+
+        Bounds bounds = targetRenderers[0].bounds;
+
+        for (int i = 1; i < targetRenderers.Length; i++)
+        {
+            bounds.Encapsulate(targetRenderers[i].bounds);
+        }
+
+        return bounds;
     }
 
     private void ConfigureColliderToVisualBounds()
