@@ -522,20 +522,13 @@ public class EnemyVisual : MonoBehaviour
 
             bool isFoot = lowerName.Contains("foot");
             bool isLeg = lowerName.Contains("leg") && !lowerName.EndsWith("_legs");
-            bool isShoulder = lowerName.Contains("shoulder");
 
-            if (!isFoot && !isLeg && !isShoulder)
+            if (!isFoot && !isLeg)
                 continue;
 
             float phase = (legIndex % 2 == 0 ? 0f : Mathf.PI) + (legIndex / 2) * 0.55f;
             float swing = visualType == EnemyVisualType.Melee ? 20f : 16f;
             float lift = visualType == EnemyVisualType.Melee ? 0.11f : 0.08f;
-
-            if (isShoulder)
-            {
-                swing *= 0.55f;
-                lift *= 0.45f;
-            }
 
             parts.Add(new AnimatedPart
             {

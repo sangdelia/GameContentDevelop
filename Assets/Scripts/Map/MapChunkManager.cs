@@ -16,6 +16,7 @@ public class MapChunkManager : MonoBehaviour
     [Header("Random Props")]
     [SerializeField] private GameObject[] propPrefabs;
     [SerializeField] private bool useSciFiResourceProps = true;
+    [SerializeField] private bool preferSciFiResourceProps = true;
     [SerializeField] private float sciFiPropChance = 0.75f;
     [SerializeField] private int minPropsPerChunk = 3;
     [SerializeField] private int maxPropsPerChunk = 8;
@@ -23,6 +24,14 @@ public class MapChunkManager : MonoBehaviour
     [SerializeField] private float minPropSpacing = 7f;
     [SerializeField] private float startSafeRadius = 7f;
     [SerializeField] private int maxPlacementAttempts = 40;
+
+    [Header("Sci-Fi Floor")]
+    [SerializeField] private bool decorateSciFiFloor = true;
+    [SerializeField] private float floorPanelSize = 9f;
+    [SerializeField] private float floorLineWidth = 0.08f;
+    [SerializeField] private Color floorBaseColor = new Color(0.12f, 0.14f, 0.16f);
+    [SerializeField] private Color floorPanelColor = new Color(0.18f, 0.21f, 0.24f);
+    [SerializeField] private Color floorAccentColor = new Color(0.05f, 0.9f, 1f);
 
     private Vector2Int currentChunkCoord;
     private Vector2Int startChunkCoord;
@@ -62,6 +71,8 @@ public class MapChunkManager : MonoBehaviour
         minPropSpacing = Mathf.Max(0f, minPropSpacing);
         startSafeRadius = Mathf.Max(0f, startSafeRadius);
         maxPlacementAttempts = Mathf.Max(1, maxPlacementAttempts);
+        floorPanelSize = Mathf.Clamp(floorPanelSize, 3f, chunkSize);
+        floorLineWidth = Mathf.Clamp(floorLineWidth, 0.02f, 0.35f);
     }
 
     private void Start()
@@ -263,6 +274,12 @@ public class MapChunkManager : MonoBehaviour
         ground.transform.localPosition = Vector3.zero;
         ground.transform.localRotation = Quaternion.identity;
         MatchGroundSize(ground);
+        ApplySciFiGroundMaterial(ground, coord);
+
+        if (decorateSciFiFloor)
+        {
+            CreateSciFiFloorDetails(chunkRoot.transform, coord);
+        }
 
         GameObject propsRoot = new GameObject("Props");
         propsRoot.transform.SetParent(chunkRoot.transform, false);
@@ -289,6 +306,99 @@ public class MapChunkManager : MonoBehaviour
         scale.x *= chunkSize / bounds.size.x;
         scale.z *= chunkSize / bounds.size.z;
         ground.transform.localScale = scale;
+    }
+
+    private void ApplySciFiGroundMaterial(GameObject ground, Vector2Int coord)
+    {
+        Renderer[] groundRenderers = ground.GetComponentsInChildren<Renderer>();
+
+        for (int i = 0; i < groundRenderers.Length; i++)
+        {
+            Material material = CreateSciFiMaterial(floorBaseColor, floorBaseColor * 0.18f);
+            material.color = Color.Lerp(floorBaseColor, floorPanelColor, Mathf.Abs((coord.x + coord.y) % 2) * 0.12f);
+            groundRenderers[i].material = material;
+        }
+    }
+
+    private void CreateSciFiFloorDetails(Transform chunkRoot, Vector2Int coord)
+    {
+        GameObject floorDetails = new GameObject("SciFiFloorDetails");
+        floorDetails.transform.SetParent(chunkRoot, false);
+
+        int lineCount = Mathf.Max(2, Mathf.RoundToInt(chunkSize / floorPanelSize));
+        float step = chunkSize / lineCount;
+        float half = chunkSize * 0.5f;
+
+        for (int i = 1; i < lineCount; i++)
+        {
+            float offset = -half + step * i;
+            CreateFloorStrip(floorDetails.transform, new Vector3(offset, 0.025f, 0f), new Vector3(floorLineWidth, 0.018f, chunkSize), false);
+            CreateFloorStrip(floorDetails.transform, new Vector3(0f, 0.027f, offset), new Vector3(chunkSize, 0.018f, floorLineWidth), false);
+        }
+
+        CreateFloorStrip(floorDetails.transform, new Vector3(0f, 0.032f, 0f), new Vector3(chunkSize, 0.025f, floorLineWidth * 1.7f), true);
+        CreateFloorStrip(floorDetails.transform, new Vector3(0f, 0.034f, 0f), new Vector3(floorLineWidth * 1.7f, 0.025f, chunkSize), true);
+
+        System.Random random = new System.Random(worldSeed + coord.x * 83492791 + coord.y * 297121507);
+        int decalCount = 4;
+
+        for (int i = 0; i < decalCount; i++)
+        {
+            float x = RandomRange(random, -half + 4f, half - 4f);
+            float z = RandomRange(random, -half + 4f, half - 4f);
+            float sx = RandomRange(random, 1.5f, 3.2f);
+            float sz = RandomRange(random, 0.14f, 0.32f);
+            bool rotate = random.NextDouble() > 0.5;
+            Vector3 size = rotate ? new Vector3(sz, 0.02f, sx) : new Vector3(sx, 0.02f, sz);
+            CreateFloorStrip(floorDetails.transform, new Vector3(x, 0.04f, z), size, true);
+        }
+    }
+
+    private void CreateFloorStrip(Transform parent, Vector3 localPosition, Vector3 localScale, bool accent)
+    {
+        GameObject strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        strip.name = accent ? "Floor_AccentLine" : "Floor_PanelSeam";
+        strip.transform.SetParent(parent, false);
+        strip.transform.localPosition = localPosition;
+        strip.transform.localRotation = Quaternion.identity;
+        strip.transform.localScale = localScale;
+
+        Collider collider = strip.GetComponent<Collider>();
+
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        Renderer renderer = strip.GetComponent<Renderer>();
+
+        if (renderer != null)
+        {
+            Color color = accent ? floorAccentColor : floorPanelColor * 0.62f;
+            Color emission = accent ? floorAccentColor * 1.8f : Color.black;
+            renderer.material = CreateSciFiMaterial(color, emission);
+        }
+    }
+
+    private Material CreateSciFiMaterial(Color color, Color emissionColor)
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        Material material = new Material(shader);
+        material.color = color;
+
+        if (material.HasProperty("_EmissionColor") && emissionColor.maxColorComponent > 0.001f)
+        {
+            material.EnableKeyword("_EMISSION");
+            material.SetColor("_EmissionColor", emissionColor);
+        }
+
+        return material;
     }
 
     private void GenerateProps(Vector2Int coord, Transform propsRoot)
@@ -398,7 +508,7 @@ public class MapChunkManager : MonoBehaviour
     {
         bool useSciFi = useSciFiResourceProps &&
             sciFiPropPrefabs.Count > 0 &&
-            (propPrefabs == null || propPrefabs.Length == 0 || random.NextDouble() <= sciFiPropChance);
+            (preferSciFiResourceProps || propPrefabs == null || propPrefabs.Length == 0 || random.NextDouble() <= sciFiPropChance);
 
         if (useSciFi)
         {
