@@ -72,6 +72,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     private Image healthFill;
     private Image expFill;
     private Image bossHealthFill;
+    private Image damageOverlay;
 
     private PlayerLevel playerLevel;
     private PlayerHealth playerHealth;
@@ -88,6 +89,8 @@ public class StargraveRuntimeUI : MonoBehaviour
     private bool isBound;
     private bool playerMoveWasEnabled;
     private bool playerShootWasEnabled;
+    private float damageFlashTimer;
+    private float lastHealthRatio = 1f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateRuntimeUI()
@@ -141,6 +144,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (playerHealth != null)
         {
             playerHealth.HealthChanged -= HandleHealthChanged;
+            playerHealth.Damaged -= HandlePlayerDamaged;
             playerHealth.Died -= ShowGameOver;
         }
 
@@ -175,6 +179,9 @@ public class StargraveRuntimeUI : MonoBehaviour
             if (Keyboard.current.digit2Key.wasPressedThisFrame) SelectTrait(1);
             if (Keyboard.current.digit3Key.wasPressedThisFrame) SelectTrait(2);
         }
+
+        UpdateDamageOverlay();
+        UpdateLowHealthPulse();
     }
 
     private void BindPlayer()
@@ -200,6 +207,7 @@ public class StargraveRuntimeUI : MonoBehaviour
             playerLevel.LevelChanged += HandleLevelChanged;
             playerLevel.LevelUpChoicesRequested += ShowTraitChoices;
             playerHealth.HealthChanged += HandleHealthChanged;
+            playerHealth.Damaged += HandlePlayerDamaged;
             playerHealth.Died += ShowGameOver;
 
             HandleExpChanged(playerLevel.Level, playerLevel.CurrentExp, playerLevel.RequiredExp);
@@ -310,6 +318,7 @@ public class StargraveRuntimeUI : MonoBehaviour
 
         expText = CreateAnchoredText(hudPanel.transform, "EXP 0 / 10", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 0f), new Vector2(0f, 58f), new Vector2(520f, 34f));
         expFill = CreateAnchoredBar(hudPanel.transform, new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(680f, 26f), new Color(0.2f, 0.75f, 1f, 1f));
+        damageOverlay = CreateScreenOverlay(hudPanel.transform, new Color(1f, 0f, 0f, 0f));
     }
 
     private void BuildTraitPanel()
@@ -413,6 +422,23 @@ public class StargraveRuntimeUI : MonoBehaviour
         RectTransform frameRect = image.transform.parent.GetComponent<RectTransform>();
         SetAnchor(frameRect, anchor);
         frameRect.anchoredPosition = position;
+        return image;
+    }
+
+    private Image CreateScreenOverlay(Transform parent, Color color)
+    {
+        GameObject overlayObject = new GameObject("DamageOverlay");
+        RectTransform rect = overlayObject.AddComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        Image image = overlayObject.AddComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+        overlayObject.transform.SetAsLastSibling();
         return image;
     }
 
@@ -586,6 +612,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         objectiveText.text = portalOpened
             ? "BOSS PORTAL OPEN - ENTER THE RIFT"
             : $"Kills {killCount} / {requiredKills}";
+        objectiveText.color = portalOpened ? new Color(0.2f, 1f, 1f, 1f) : Color.white;
     }
 
     private void HandleBossFightStarted()
@@ -775,7 +802,43 @@ public class StargraveRuntimeUI : MonoBehaviour
 
         if (healthFill != null)
         {
-            healthFill.fillAmount = max <= 0f ? 0f : Mathf.Clamp01(current / max);
+            lastHealthRatio = max <= 0f ? 0f : Mathf.Clamp01(current / max);
+            healthFill.fillAmount = lastHealthRatio;
+        }
+    }
+
+    private void HandlePlayerDamaged(float damage)
+    {
+        damageFlashTimer = 0.32f;
+    }
+
+    private void UpdateDamageOverlay()
+    {
+        if (damageOverlay == null)
+            return;
+
+        if (damageFlashTimer > 0f)
+        {
+            damageFlashTimer -= Time.unscaledDeltaTime;
+        }
+
+        float alpha = Mathf.Clamp01(damageFlashTimer / 0.32f) * 0.34f;
+        damageOverlay.color = new Color(1f, 0.05f, 0.02f, alpha);
+    }
+
+    private void UpdateLowHealthPulse()
+    {
+        if (healthFill == null)
+            return;
+
+        if (lastHealthRatio > 0f && lastHealthRatio <= 0.3f)
+        {
+            float pulse = 0.5f + Mathf.Sin(Time.unscaledTime * 8f) * 0.5f;
+            healthFill.color = Color.Lerp(new Color(0.9f, 0.1f, 0.16f, 1f), new Color(1f, 0.7f, 0.08f, 1f), pulse);
+        }
+        else
+        {
+            healthFill.color = new Color(0.9f, 0.1f, 0.16f, 1f);
         }
     }
 

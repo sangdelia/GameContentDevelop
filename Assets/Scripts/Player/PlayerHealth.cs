@@ -21,6 +21,7 @@ public class PlayerHealth : MonoBehaviour
     public bool IsDead => currentHealth <= 0f;
 
     public event System.Action<float, float> HealthChanged;
+    public event System.Action<float> Damaged;
     public event System.Action Died;
 
     private bool shieldReady;
@@ -72,6 +73,8 @@ public class PlayerHealth : MonoBehaviour
 
         float reducedDamage = Mathf.Max(1f, damage - flatDamageReduction);
         currentHealth = Mathf.Max(0f, currentHealth - reducedDamage);
+        Damaged?.Invoke(reducedDamage);
+        GameVfx.SpawnHitSpark(transform.position + Vector3.up * 0.8f, -transform.forward, false);
         NotifyChanged();
 
         if (IsDead)

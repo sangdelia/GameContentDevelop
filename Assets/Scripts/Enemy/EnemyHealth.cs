@@ -11,6 +11,9 @@ public class EnemyHealth : MonoBehaviour
     [SerializeField] private GameObject expOrbPrefab;
     [SerializeField] private int expDropCount = 1;
 
+    [Header("Debug")]
+    [SerializeField] private bool logDamage = false;
+
     private float currentHp;
     private bool isDead;
 
@@ -54,7 +57,10 @@ public class EnemyHealth : MonoBehaviour
         HealthChanged?.Invoke(currentHp, maxHp);
         GameAudio.PlayHit(transform.position);
 
-        Debug.Log($"{name} HP: {currentHp}/{maxHp}");
+        if (logDamage)
+        {
+            Debug.Log($"{name} HP: {currentHp}/{maxHp}");
+        }
 
         if (currentHp <= 0f)
         {
