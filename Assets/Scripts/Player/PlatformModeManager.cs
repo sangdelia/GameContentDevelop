@@ -61,6 +61,13 @@ public class PlatformModeManager : MonoBehaviour
     public void ApplyCurrentPlatformMode()
     {
         StargravePlayMode.Mode mode = DetectMode();
+        ApplyMode(mode);
+    }
+
+    public void ApplyMode(StargravePlayMode.Mode mode)
+    {
+        DiscoverMissingReferences();
+        EnsureRuntimeVrRig();
         StargravePlayMode.SetMode(mode);
 
         bool useVr = mode == StargravePlayMode.Mode.VrQuest2;
@@ -264,13 +271,29 @@ public class PlatformModeManager : MonoBehaviour
         {
             GameObject eventSystemObject = new GameObject("EventSystem");
             eventSystemObject.AddComponent<EventSystem>();
-            eventSystemObject.AddComponent<InputSystemUIInputModule>();
+            EnsureInputSystemUiModule(eventSystemObject);
             return;
         }
 
         for (int i = 0; i < systems.Length; i++)
         {
             systems[i].gameObject.SetActive(i == 0);
+        }
+
+        EnsureInputSystemUiModule(systems[0].gameObject);
+    }
+
+    private void EnsureInputSystemUiModule(GameObject eventSystemObject)
+    {
+        InputSystemUIInputModule inputModule = eventSystemObject.GetComponent<InputSystemUIInputModule>();
+        if (inputModule == null)
+        {
+            inputModule = eventSystemObject.AddComponent<InputSystemUIInputModule>();
+        }
+
+        if (inputModule.actionsAsset == null)
+        {
+            inputModule.AssignDefaultActions();
         }
     }
 

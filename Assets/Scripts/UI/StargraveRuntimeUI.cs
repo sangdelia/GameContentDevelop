@@ -93,6 +93,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     private bool isBound;
     private bool playerMoveWasEnabled;
     private bool playerShootWasEnabled;
+    private bool startMenuControlsWereStored;
     private float damageFlashTimer;
     private float lastHealthRatio = 1f;
 
@@ -140,6 +141,12 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (!useStartScreen)
         {
             ShowGameplay();
+            return;
+        }
+
+        if (!isStarted)
+        {
+            ShowStart();
         }
     }
 
@@ -182,6 +189,11 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (useStartScreen && !isStarted && Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
         {
             StartPcGame();
+        }
+
+        if (useStartScreen && !isStarted)
+        {
+            KeepStartMenuInteractive();
         }
 
         if (isChoosingTrait && Keyboard.current != null)
@@ -247,12 +259,31 @@ public class StargraveRuntimeUI : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (FindFirstObjectByType<EventSystem>() != null)
+        EventSystem eventSystem = FindFirstObjectByType<EventSystem>(FindObjectsInactive.Include);
+        if (eventSystem != null)
+        {
+            eventSystem.gameObject.SetActive(true);
+            EnsureInputSystemUiModule(eventSystem.gameObject);
             return;
+        }
 
         GameObject eventSystemObject = new GameObject("EventSystem");
         eventSystemObject.AddComponent<EventSystem>();
-        eventSystemObject.AddComponent<InputSystemUIInputModule>();
+        EnsureInputSystemUiModule(eventSystemObject);
+    }
+
+    private void EnsureInputSystemUiModule(GameObject eventSystemObject)
+    {
+        InputSystemUIInputModule inputModule = eventSystemObject.GetComponent<InputSystemUIInputModule>();
+        if (inputModule == null)
+        {
+            inputModule = eventSystemObject.AddComponent<InputSystemUIInputModule>();
+        }
+
+        if (inputModule.actionsAsset == null)
+        {
+            inputModule.AssignDefaultActions();
+        }
     }
 
     private void BuildCanvas()
@@ -538,8 +569,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         hudPanel.SetActive(false);
         traitPanel.SetActive(false);
         endPanel.SetActive(false);
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        KeepStartMenuInteractive();
     }
 
     private void StartPcGame()
@@ -556,9 +586,48 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         StargravePlayMode.SetMode(mode);
         BindPlayer();
-        ApplyPlatformMode(mode, Camera.main);
+        PlatformModeManager modeManager = FindFirstObjectByType<PlatformModeManager>();
+        if (modeManager != null)
+        {
+            modeManager.ApplyMode(mode);
+        }
+        else
+        {
+            ApplyPlatformMode(mode, Camera.main);
+        }
+
         ApplySelectedPlayMode();
         ShowGameplay();
+    }
+
+    private void KeepStartMenuInteractive()
+    {
+        Time.timeScale = 0f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        EnsureEventSystem();
+
+        if (!isBound)
+        {
+            BindPlayer();
+        }
+
+        if (!startMenuControlsWereStored)
+        {
+            playerMoveWasEnabled = playerMove != null && playerMove.enabled;
+            playerShootWasEnabled = playerShoot != null && playerShoot.enabled;
+            startMenuControlsWereStored = true;
+        }
+
+        if (playerMove != null)
+        {
+            playerMove.enabled = false;
+        }
+
+        if (playerShoot != null)
+        {
+            playerShoot.enabled = false;
+        }
     }
 
     private StargravePlayMode.Mode GetBuildDefaultMode()
@@ -603,6 +672,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         Time.timeScale = 1f;
         isStarted = true;
+        startMenuControlsWereStored = false;
         startPanel.SetActive(false);
         hudPanel.SetActive(true);
         traitPanel.SetActive(false);
