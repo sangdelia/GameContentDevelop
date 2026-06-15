@@ -69,7 +69,7 @@ public static class BossArenaBuilder
         CreateCoverWall(root, "LaserCover_RightForward", new Vector3(8.5f, 2.05f, 7.5f), new Vector3(2.2f, 4.1f, 8.2f), coverColor, accentColor);
         CreateCoverWall(root, "LaserCover_LeftBack", new Vector3(-8.5f, 2.05f, -8.5f), new Vector3(2.2f, 4.1f, 7.4f), coverColor, accentColor);
         CreateCoverWall(root, "LaserCover_RightBack", new Vector3(8.5f, 2.05f, -8.5f), new Vector3(2.2f, 4.1f, 7.4f), coverColor, accentColor);
-        CreateCoverWall(root, "LaserCover_RearGate", new Vector3(0f, 2.05f, -12.8f), new Vector3(9f, 4.1f, 1.8f), coverColor, accentColor);
+        CreateCoverWall(root, "LaserCover_RearGate", new Vector3(0f, 2.05f, -17.5f), new Vector3(9f, 4.1f, 1.8f), coverColor, accentColor);
     }
 
     private static void CreateCoverWall(Transform root, string name, Vector3 localPosition, Vector3 scale, Color color, Color accentColor)

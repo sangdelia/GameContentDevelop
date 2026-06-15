@@ -187,7 +187,8 @@ public class GameProgressManager : MonoBehaviour
 
     private void TeleportPlayerToBossArena()
     {
-        Vector3 lookDirection = bossSpawnPosition - bossPlayerSpawnPosition;
+        Vector3 safePlayerSpawnPosition = GetSafeBossPlayerSpawnPosition();
+        Vector3 lookDirection = bossSpawnPosition - safePlayerSpawnPosition;
         lookDirection.y = 0f;
 
         if (lookDirection.sqrMagnitude < 0.001f)
@@ -201,11 +202,11 @@ public class GameProgressManager : MonoBehaviour
 
         if (dummyMove != null)
         {
-            dummyMove.TeleportTo(bossPlayerSpawnPosition, playerRotation);
+            dummyMove.TeleportTo(safePlayerSpawnPosition, playerRotation);
         }
         else
         {
-            player.SetPositionAndRotation(bossPlayerSpawnPosition, playerRotation);
+            player.SetPositionAndRotation(safePlayerSpawnPosition, playerRotation);
         }
 
         CameraFollowTarget cameraFollow = Camera.main != null ? Camera.main.GetComponent<CameraFollowTarget>() : null;
@@ -214,6 +215,83 @@ public class GameProgressManager : MonoBehaviour
         {
             cameraFollow.SnapToTarget();
         }
+    }
+
+    private Vector3 GetSafeBossPlayerSpawnPosition()
+    {
+        Vector3[] offsets =
+        {
+            Vector3.zero,
+            Vector3.forward * 2.5f,
+            Vector3.right * 2.5f,
+            Vector3.left * 2.5f,
+            Vector3.forward * 2.5f + Vector3.right * 2.5f,
+            Vector3.forward * 2.5f + Vector3.left * 2.5f,
+            Vector3.back * 2.5f
+        };
+
+        for (int i = 0; i < offsets.Length; i++)
+        {
+            Vector3 candidate = bossPlayerSpawnPosition + offsets[i];
+            if (!IsBossPlayerSpawnBlocked(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return bossPlayerSpawnPosition + Vector3.forward * 3f;
+    }
+
+    private bool IsBossPlayerSpawnBlocked(Vector3 position)
+    {
+        float radius = 0.55f;
+        float height = 1.9f;
+
+        CapsuleCollider playerCollider = player != null ? player.GetComponent<CapsuleCollider>() : null;
+        if (playerCollider != null)
+        {
+            radius = Mathf.Max(0.25f, playerCollider.radius * Mathf.Max(player.lossyScale.x, player.lossyScale.z));
+            height = Mathf.Max(radius * 2f + 0.1f, playerCollider.height * player.lossyScale.y);
+        }
+
+        Vector3 center = position + Vector3.up * (height * 0.5f);
+        float halfLine = Mathf.Max(0f, height * 0.5f - radius);
+        Vector3 point1 = center + Vector3.up * halfLine;
+        Vector3 point2 = center - Vector3.up * halfLine;
+
+        Collider[] hits = Physics.OverlapCapsule(point1, point2, radius, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i];
+
+            if (ShouldIgnoreBossSpawnBlocker(hit))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool ShouldIgnoreBossSpawnBlocker(Collider hit)
+    {
+        if (hit == null || hit.isTrigger)
+            return true;
+
+        if (player != null && hit.transform.IsChildOf(player))
+            return true;
+
+        if (hit.GetComponentInParent<PlayerHealth>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<EnemyHealth>() != null)
+            return true;
+
+        if (hit.CompareTag("Ground"))
+            return true;
+
+        string objectName = hit.name;
+        return objectName.Contains("Ground") || objectName.Contains("Floor") || objectName.Contains("Projectile");
     }
 
     private void FindPlayer()
