@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.XR;
+using Unity.XR.CoreUtils;
+using UnityEngine.XR.Interaction.Toolkit;
 
 public class PlatformModeManager : MonoBehaviour
 {
@@ -30,6 +32,8 @@ public class PlatformModeManager : MonoBehaviour
     [SerializeField] private PlayerDummyMove pcMove;
     [SerializeField] private PlayerShootTest playerShoot;
     [SerializeField] private SimpleQuest2VrRig vrRig;
+    [SerializeField] private XROrigin xrOriginComponent;
+    [SerializeField] private XRInteractionManager xrInteractionManager;
     [SerializeField] private Camera pcCameraComponent;
     [SerializeField] private Camera xrCameraComponent;
     [SerializeField] private bool keepPlayerRootActiveInVr = true;
@@ -131,8 +135,11 @@ public class PlatformModeManager : MonoBehaviour
 
     private void EnsureRuntimeVrRig()
     {
+        EnsureXrInteractionManager();
+
         if (xrOrigin != null && vrRig != null && xrCameraComponent != null && vrLeftController != null && vrRightController != null)
         {
+            ConfigureXrOriginComponent();
             vrRig.Configure(GetLocomotionRoot(), xrCameraComponent, vrLeftController.transform, vrRightController.transform);
             return;
         }
@@ -149,25 +156,47 @@ public class PlatformModeManager : MonoBehaviour
             xrOrigin.transform.localRotation = Quaternion.identity;
         }
 
+        Transform cameraOffset = xrOrigin.transform.Find("Camera Offset");
+        if (cameraOffset == null)
+        {
+            GameObject cameraOffsetObject = new GameObject("Camera Offset");
+            cameraOffsetObject.transform.SetParent(xrOrigin.transform, false);
+            cameraOffsetObject.transform.localPosition = Vector3.zero;
+            cameraOffsetObject.transform.localRotation = Quaternion.identity;
+            cameraOffset = cameraOffsetObject.transform;
+        }
+
         if (xrCameraComponent == null)
         {
             GameObject cameraObject = new GameObject("XR Camera");
-            cameraObject.transform.SetParent(xrOrigin.transform, false);
+            cameraObject.transform.SetParent(cameraOffset, false);
             cameraObject.transform.localPosition = Vector3.up * 1.6f;
             xrCameraComponent = cameraObject.AddComponent<Camera>();
             cameraObject.AddComponent<AudioListener>();
+        }
+        else if (xrCameraComponent.transform.parent != cameraOffset)
+        {
+            xrCameraComponent.transform.SetParent(cameraOffset, true);
         }
 
         if (vrLeftController == null)
         {
             vrLeftController = new GameObject("VR Left Controller");
-            vrLeftController.transform.SetParent(xrOrigin.transform, false);
+            vrLeftController.transform.SetParent(cameraOffset, false);
+        }
+        else if (vrLeftController.transform.parent != cameraOffset)
+        {
+            vrLeftController.transform.SetParent(cameraOffset, false);
         }
 
         if (vrRightController == null)
         {
             vrRightController = new GameObject("VR Right Controller");
-            vrRightController.transform.SetParent(xrOrigin.transform, false);
+            vrRightController.transform.SetParent(cameraOffset, false);
+        }
+        else if (vrRightController.transform.parent != cameraOffset)
+        {
+            vrRightController.transform.SetParent(cameraOffset, false);
         }
 
         if (vrRig == null)
@@ -179,7 +208,43 @@ public class PlatformModeManager : MonoBehaviour
             }
         }
 
+        ConfigureXrOriginComponent();
         vrRig.Configure(playerRoot, xrCameraComponent, vrLeftController.transform, vrRightController.transform);
+    }
+
+    private void EnsureXrInteractionManager()
+    {
+        if (xrInteractionManager != null)
+            return;
+
+        xrInteractionManager = FindFirstObjectByType<XRInteractionManager>();
+        if (xrInteractionManager != null)
+            return;
+
+        GameObject managerObject = new GameObject("XR Interaction Manager");
+        xrInteractionManager = managerObject.AddComponent<XRInteractionManager>();
+    }
+
+    private void ConfigureXrOriginComponent()
+    {
+        if (xrOrigin == null || xrCameraComponent == null)
+            return;
+
+        if (xrOriginComponent == null)
+        {
+            xrOriginComponent = xrOrigin.GetComponent<XROrigin>();
+            if (xrOriginComponent == null)
+            {
+                xrOriginComponent = xrOrigin.AddComponent<XROrigin>();
+            }
+        }
+
+        Transform cameraOffset = xrCameraComponent.transform.parent != null ? xrCameraComponent.transform.parent : xrOrigin.transform;
+        xrOriginComponent.Origin = xrOrigin;
+        xrOriginComponent.CameraFloorOffsetObject = cameraOffset.gameObject;
+        xrOriginComponent.Camera = xrCameraComponent;
+        xrOriginComponent.RequestedTrackingOriginMode = XROrigin.TrackingOriginMode.Floor;
+        xrOriginComponent.CameraYOffset = 1.6f;
     }
 
     private Transform GetLocomotionRoot()
