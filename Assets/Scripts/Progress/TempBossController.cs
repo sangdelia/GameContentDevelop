@@ -3,6 +3,8 @@ using UnityEngine;
 [RequireComponent(typeof(EnemyHealth))]
 public class TempBossController : MonoBehaviour
 {
+    private const string ToiletMechBossResourcePath = "Models/Boss/ToiletMech_Boss";
+
     [SerializeField] private float moveSpeed = 3.2f;
     [SerializeField] private float closeAttackDistance = 4f;
     [SerializeField] private float closeAttackDamage = 18f;
@@ -16,6 +18,9 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float deathBeamVisibleTime = 0.18f;
     [SerializeField] private float patternInterval = 3.2f;
     [SerializeField] private float fightStartGraceTime = 3f;
+    [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -0.95f, 0f);
+    [SerializeField] private Vector3 toiletMechLocalRotation = new Vector3(0f, 180f, 0f);
+    [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.15f;
 
     private Transform player;
     private PlayerHealth playerHealth;
@@ -250,12 +255,17 @@ public class TempBossController : MonoBehaviour
         bossModelRoot.localRotation = Quaternion.identity;
         bossModelRoot.localScale = Vector3.one;
 
-        CreateBossModelPart("Models/KenneySpace/room-small-variation", "BossArmoredShell", new Vector3(0f, -0.05f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.2f, normalColor, 0.8f);
-        CreateBossModelPart("Models/SpaceStation/computer-system", "BossReactorTorso", new Vector3(0f, 0.08f, 0.08f), Quaternion.identity, Vector3.one * 2.8f, normalColor, 1.1f);
-        CreateBossModelPart("Models/KenneySpace/template-wall-detail-a", "BossBackArmor", new Vector3(0f, 0.2f, -0.58f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.6f, new Color(0.25f, 0.08f, 0.36f), 0.7f);
-        leftWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossLeftEmitter", new Vector3(-1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, -8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(0.1f, 0.85f, 1f), 1.6f);
-        rightWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossRightEmitter", new Vector3(1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, 8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(1f, 0.2f, 0.75f), 1.5f);
-        shoulderArray = CreateBossModelPart("Models/KenneySpace/cables", "BossShoulderCableArray", new Vector3(0f, 0.86f, -0.12f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.3f, new Color(0.08f, 0.9f, 1f), 1.0f);
+        bool importedBossApplied = TryCreateImportedToiletMechBoss();
+
+        if (!importedBossApplied)
+        {
+            CreateBossModelPart("Models/KenneySpace/room-small-variation", "BossArmoredShell", new Vector3(0f, -0.05f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.2f, normalColor, 0.8f);
+            CreateBossModelPart("Models/SpaceStation/computer-system", "BossReactorTorso", new Vector3(0f, 0.08f, 0.08f), Quaternion.identity, Vector3.one * 2.8f, normalColor, 1.1f);
+            CreateBossModelPart("Models/KenneySpace/template-wall-detail-a", "BossBackArmor", new Vector3(0f, 0.2f, -0.58f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.6f, new Color(0.25f, 0.08f, 0.36f), 0.7f);
+            leftWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossLeftEmitter", new Vector3(-1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, -8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(0.1f, 0.85f, 1f), 1.6f);
+            rightWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossRightEmitter", new Vector3(1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, 8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(1f, 0.2f, 0.75f), 1.5f);
+            shoulderArray = CreateBossModelPart("Models/KenneySpace/cables", "BossShoulderCableArray", new Vector3(0f, 0.86f, -0.12f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.3f, new Color(0.08f, 0.9f, 1f), 1.0f);
+        }
 
         topRing = CreateBossRing("TopReactorRing", new Vector3(0f, 0.82f, 0f), new Vector3(1.28f, 0.05f, 1.28f), new Color(0.1f, 0.9f, 1f));
         lowerRing = CreateBossRing("LowerReactorRing", new Vector3(0f, -0.42f, 0f), new Vector3(1.08f, 0.04f, 1.08f), new Color(1f, 0.2f, 0.9f));
@@ -291,6 +301,39 @@ public class TempBossController : MonoBehaviour
         Destroy(ring.GetComponent<Collider>());
         ApplyBossMaterial(ring, color, 2f);
         return ring.transform;
+    }
+
+    private bool TryCreateImportedToiletMechBoss()
+    {
+        GameObject prefab = Resources.Load<GameObject>(ToiletMechBossResourcePath);
+
+        if (prefab == null || bossModelRoot == null)
+            return false;
+
+        GameObject instance = Instantiate(prefab, bossModelRoot);
+        instance.name = "Boss_ToiletMech_Model";
+        instance.transform.localPosition = toiletMechLocalPosition;
+        instance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
+        instance.transform.localScale = toiletMechLocalScale;
+
+        Collider[] colliders = instance.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Destroy(colliders[i]);
+        }
+
+        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Material material = renderers[i].material;
+            if (material != null && material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", new Color(0.1f, 0.75f, 1f) * 0.55f);
+            }
+        }
+
+        return true;
     }
 
     private void AnimateBossVisuals()
