@@ -189,8 +189,8 @@ public class EnemySpawner : MonoBehaviour
             flyingAttack.Init(player);
             ConfigureHealth(enemy, flyingHp);
             enemy.name = "Enemy_Flying_Drone";
-            enemy.transform.position += Vector3.up * 3.2f;
-            enemy.transform.localScale = Vector3.one * 0.7f;
+            enemy.transform.position += Vector3.up * 3.55f;
+            enemy.transform.localScale = Vector3.one * 1.08f;
             ApplyEnemyColor(enemy, new Color(1f, 0.25f, 0.95f));
             EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Flying);
             return;
@@ -210,7 +210,7 @@ public class EnemySpawner : MonoBehaviour
             ConfigureHealth(enemy, rangedHp);
             enemy.name = "Enemy_Ranged_Gunner";
             ApplyEnemyColor(enemy, new Color(0.1f, 0.85f, 1f));
-            enemy.transform.localScale = Vector3.one * 0.9f;
+            enemy.transform.localScale = Vector3.one * 1.18f;
             EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Ranged);
             return;
         }
@@ -225,6 +225,7 @@ public class EnemySpawner : MonoBehaviour
 
         ConfigureHealth(enemy, meleeHp);
         enemy.name = "Enemy_Melee_Chaser";
+        enemy.transform.localScale = Vector3.one * 1.16f;
         EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Melee);
     }
 

@@ -76,6 +76,49 @@ public class MapChunkManager : MonoBehaviour
         "template-wall-top"
     };
 
+    private readonly string[] quaterniusBattlePropResourceNames =
+    {
+        "Column_1",
+        "Column_2",
+        "Column_3",
+        "Column_Slim",
+        "Door_Double",
+        "Door_Single",
+        "Pipes",
+        "Props_Base",
+        "Props_Capsule",
+        "Props_Chest",
+        "Props_Computer",
+        "Props_ComputerSmall",
+        "Props_ContainerFull",
+        "Props_Crate",
+        "Props_CrateLong",
+        "Props_Laser",
+        "Props_Pod",
+        "Props_Shelf",
+        "Props_Shelf_Tall",
+        "Props_Teleporter_1",
+        "Props_Teleporter_2",
+        "Props_Vessel",
+        "Props_Vessel_Short",
+        "Props_Vessel_Tall",
+        "RoofTile_Pipes1",
+        "RoofTile_Vents",
+        "Staircase",
+        "Details/Details_Cylinder_Long",
+        "Details/Details_Pipes_Long",
+        "Details/Details_Pipes_Medium",
+        "Details/Details_Plate_Large",
+        "Details/Details_Vent_1",
+        "Details/Details_Vent_2",
+        "Details/Details_X",
+        "Walls/SmallWindows_Wall_SideA",
+        "Walls/Wall_1",
+        "Walls/Wall_2",
+        "Walls/Wall_3",
+        "Walls/Wall_4"
+    };
+
     private void OnValidate()
     {
         chunkSize = Mathf.Max(1f, chunkSize);
@@ -394,7 +437,7 @@ public class MapChunkManager : MonoBehaviour
             {
                 CreateTechPlate(setPieces.transform, position, random);
             }
-            else if (random.NextDouble() < 0.55)
+            else if (random.NextDouble() < 0.78)
             {
                 CreateModularSetPiece(setPieces.transform, position, random);
             }
@@ -413,6 +456,13 @@ public class MapChunkManager : MonoBehaviour
     {
         string[] options =
         {
+            "Q:Props_ContainerFull",
+            "Q:Props_CrateLong",
+            "Q:Props_Pod",
+            "Q:Props_Vessel_Tall",
+            "Q:Props_Laser",
+            "Q:Details/Details_Pipes_Long",
+            "Q:Walls/Wall_2",
             "template-detail",
             "template-floor-layer-raised",
             "template-wall-half",
@@ -421,7 +471,10 @@ public class MapChunkManager : MonoBehaviour
         };
 
         string resourceName = options[random.Next(0, options.Length)];
-        GameObject prefab = Resources.Load<GameObject>("Models/KenneySpace/" + resourceName);
+        bool quaternius = resourceName.StartsWith("Q:");
+        string cleanName = quaternius ? resourceName.Substring(2) : resourceName;
+        string resourcePath = quaternius ? "Models/QuaterniusSciFi/" + cleanName : "Models/KenneySpace/" + cleanName;
+        GameObject prefab = Resources.Load<GameObject>(resourcePath);
 
         if (prefab == null)
         {
@@ -430,10 +483,10 @@ public class MapChunkManager : MonoBehaviour
         }
 
         GameObject piece = Instantiate(prefab, parent);
-        piece.name = "Floor_Modular_" + resourceName;
+        piece.name = "Floor_Modular_" + cleanName.Replace("/", "_");
         piece.transform.localPosition = localPosition;
         piece.transform.localRotation = Quaternion.Euler(0f, RandomRange(random, 0f, 360f), 0f);
-        piece.transform.localScale = Vector3.one * RandomRange(random, 1.35f, 2.15f);
+        piece.transform.localScale = Vector3.one * (quaternius ? RandomRange(random, 1.7f, 2.9f) : RandomRange(random, 1.35f, 2.15f));
 
         PlaceObjectOnGround(piece, 0f);
         EnsureObstacleCollider(piece);
@@ -684,6 +737,7 @@ public class MapChunkManager : MonoBehaviour
 
         LoadResourceProps("Models/SpaceStation/", sciFiPropResourceNames);
         LoadResourceProps("Models/KenneySpace/", modularSciFiPropResourceNames);
+        LoadResourceProps("Models/QuaterniusSciFi/", quaterniusBattlePropResourceNames);
     }
 
     private void LoadResourceProps(string resourceRoot, string[] resourceNames)
