@@ -31,6 +31,14 @@ public static class GameVfx
         }
     }
 
+    public static void SpawnHitMarker(Vector3 position, Vector3 normal, Color accentColor)
+    {
+        Vector3 facing = normal.sqrMagnitude > 0.001f ? normal.normalized : Vector3.up;
+        Color hotColor = Color.Lerp(Color.white, accentColor, 0.45f);
+        CreateTexturedQuad("VFX_HitMarker", null, position + facing * 0.09f, Quaternion.LookRotation(facing), Vector3.one * 0.48f, "star_04", hotColor, 0.12f);
+        CreateTexturedQuad("VFX_HitPulse", null, position + facing * 0.07f, Quaternion.LookRotation(facing), Vector3.one * 0.72f, "circle_03", new Color(1f, 0.2f, 0.12f, 0.9f), 0.1f);
+    }
+
     public static void SpawnEnemyDeathBurst(Vector3 position)
     {
         CreateTexturedQuad("VFX_DeathFlash", null, position + Vector3.up * 0.8f, Quaternion.LookRotation(Vector3.up), Vector3.one * 1.45f, "circle_04", new Color(0.95f, 0.1f, 1f), 0.2f);

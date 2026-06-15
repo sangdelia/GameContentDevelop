@@ -22,12 +22,16 @@ public class PlayerShootTest : MonoBehaviour
     [SerializeField] private bool createPcWeaponVisual = true;
     [SerializeField] private Vector3 weaponLocalPosition = new Vector3(0.23f, -0.22f, 0.48f);
     [SerializeField] private Vector3 weaponLocalRotation = new Vector3(-4f, 0f, 0f);
+    [SerializeField] private float weaponRecoilDistance = 0.085f;
+    [SerializeField] private float weaponRecoilAngle = 6.5f;
+    [SerializeField] private float cameraKickAngle = 0.32f;
 
     private LineRenderer lineRenderer;
     private Coroutine rayRoutine;
     private Coroutine recoilRoutine;
     private Transform weaponRoot;
     private Transform muzzlePoint;
+    private CameraFollowTarget cameraFollow;
     private float nextShootTime;
 
     public float Damage => damage;
@@ -49,6 +53,7 @@ public class PlayerShootTest : MonoBehaviour
             playerCamera = Camera.main;
         }
 
+        cameraFollow = playerCamera != null ? playerCamera.GetComponent<CameraFollowTarget>() : null;
         CreateLineRenderer();
         CreatePcWeaponVisual();
     }
@@ -122,7 +127,7 @@ public class PlayerShootTest : MonoBehaviour
             if (enemy != null)
             {
                 GameVfx.SpawnHitSpark(hit.point, hit.normal, true);
-                enemy.TakeDamage(damage);
+                enemy.TakeDamage(damage, hit.point, ray.direction);
 
                 if (logShotDebug)
                 {
@@ -276,6 +281,12 @@ public class PlayerShootTest : MonoBehaviour
 
     private void PlayWeaponRecoil()
     {
+        if (cameraFollow != null)
+        {
+            float yawJitter = Random.Range(-cameraKickAngle * 0.45f, cameraKickAngle * 0.45f);
+            cameraFollow.AddKick(new Vector3(Random.Range(-0.002f, 0.002f), Random.Range(-0.001f, 0.002f), -0.006f), new Vector3(-cameraKickAngle, yawJitter, Random.Range(-0.08f, 0.08f)));
+        }
+
         if (weaponRoot == null)
             return;
 
@@ -290,25 +301,32 @@ public class PlayerShootTest : MonoBehaviour
     private IEnumerator RecoilRoutine()
     {
         Vector3 basePosition = weaponLocalPosition;
-        Vector3 recoilPosition = basePosition + new Vector3(0f, -0.015f, -0.065f);
+        Quaternion baseRotation = Quaternion.Euler(weaponLocalRotation);
+        Vector3 recoilPosition = basePosition + new Vector3(Random.Range(-0.006f, 0.006f), -0.018f, -weaponRecoilDistance);
+        Quaternion recoilRotation = baseRotation * Quaternion.Euler(-weaponRecoilAngle, Random.Range(-1.4f, 1.4f), Random.Range(-1.1f, 1.1f));
         float timer = 0f;
 
         while (timer < 0.045f)
         {
             timer += Time.deltaTime;
-            weaponRoot.localPosition = Vector3.Lerp(basePosition, recoilPosition, timer / 0.045f);
+            float t = Mathf.Clamp01(timer / 0.045f);
+            weaponRoot.localPosition = Vector3.Lerp(basePosition, recoilPosition, t);
+            weaponRoot.localRotation = Quaternion.Slerp(baseRotation, recoilRotation, t);
             yield return null;
         }
 
         timer = 0f;
 
-        while (timer < 0.08f)
+        while (timer < 0.095f)
         {
             timer += Time.deltaTime;
-            weaponRoot.localPosition = Vector3.Lerp(recoilPosition, basePosition, timer / 0.08f);
+            float t = 1f - Mathf.Pow(1f - Mathf.Clamp01(timer / 0.095f), 2f);
+            weaponRoot.localPosition = Vector3.Lerp(recoilPosition, basePosition, t);
+            weaponRoot.localRotation = Quaternion.Slerp(recoilRotation, baseRotation, t);
             yield return null;
         }
 
         weaponRoot.localPosition = basePosition;
+        weaponRoot.localRotation = baseRotation;
     }
 }

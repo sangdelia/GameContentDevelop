@@ -21,6 +21,7 @@ public class EnemyHealth : MonoBehaviour
     public float MaxHp => maxHp;
     public bool IsDead => isDead;
 
+    public event System.Action<float, Vector3, Vector3> Damaged;
     public event System.Action<float, float> HealthChanged;
     public event System.Action<EnemyHealth> Died;
 
@@ -49,11 +50,17 @@ public class EnemyHealth : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
+        TakeDamage(damage, transform.position + Vector3.up * 0.8f, -transform.forward);
+    }
+
+    public void TakeDamage(float damage, Vector3 hitPoint, Vector3 hitDirection)
+    {
         if (isDead)
             return;
 
         currentHp -= damage;
         currentHp = Mathf.Max(0f, currentHp);
+        Damaged?.Invoke(damage, hitPoint, hitDirection);
         HealthChanged?.Invoke(currentHp, maxHp);
         GameAudio.PlayHit(transform.position);
 

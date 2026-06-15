@@ -27,6 +27,7 @@ public class EnemyVisual : MonoBehaviour
     private Transform muzzlePoint;
     private Transform importedLegRigRoot;
     private Renderer[] renderers;
+    private EnemyHealth health;
     private AnimatedPart[] groundAnimatedParts;
     private EnemyVisualType visualType;
     private Color baseColor;
@@ -39,6 +40,10 @@ public class EnemyVisual : MonoBehaviour
     private float chargeDuration;
     private float fireKickTimer;
     private float fireKickDuration;
+    private float hitReactionTimer;
+    private float hitReactionDuration;
+    private Vector3 hitReactionDirection;
+    private MaterialPropertyBlock hitPropertyBlock;
 
     public static EnemyVisual Attach(GameObject enemy, EnemyVisualType type)
     {
@@ -92,9 +97,16 @@ public class EnemyVisual : MonoBehaviour
         return transform.position + Vector3.up * 0.8f;
     }
 
+    private void OnDestroy()
+    {
+        UnbindHealth();
+    }
+
     private void Build(EnemyVisualType type)
     {
         visualType = type;
+        BindHealth();
+        EnsureHitReaction();
         ClearExistingVisual();
         HideSourceRenderers();
 
@@ -216,6 +228,7 @@ public class EnemyVisual : MonoBehaviour
 
         UpdateCharge();
         UpdateFireKick();
+        UpdateHitReaction();
     }
 
     private void AnimateMovement()
@@ -339,6 +352,104 @@ public class EnemyVisual : MonoBehaviour
         if (fireKickTimer <= 0f)
         {
             visualRoot.localPosition = baseVisualLocalPosition;
+        }
+    }
+
+    private void BindHealth()
+    {
+        EnemyHealth nextHealth = GetComponent<EnemyHealth>();
+
+        if (health == nextHealth)
+            return;
+
+        UnbindHealth();
+        health = nextHealth;
+
+        if (health != null)
+        {
+            health.Damaged += HandleDamaged;
+        }
+    }
+
+    private void EnsureHitReaction()
+    {
+        if (GetComponent<EnemyHitReaction>() == null)
+        {
+            gameObject.AddComponent<EnemyHitReaction>();
+        }
+    }
+
+    private void UnbindHealth()
+    {
+        if (health != null)
+        {
+            health.Damaged -= HandleDamaged;
+            health = null;
+        }
+    }
+
+    private void HandleDamaged(float damage, Vector3 hitPoint, Vector3 hitDirection)
+    {
+        Vector3 direction = hitDirection.sqrMagnitude > 0.001f ? hitDirection.normalized : -transform.forward;
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude < 0.001f)
+        {
+            direction = -transform.forward;
+        }
+
+        hitReactionDirection = direction.normalized;
+        hitReactionDuration = Mathf.Lerp(0.09f, 0.16f, Mathf.Clamp01(damage / 30f));
+        hitReactionTimer = hitReactionDuration;
+        GameVfx.SpawnHitMarker(hitPoint, -hitReactionDirection, baseColor);
+    }
+
+    private void UpdateHitReaction()
+    {
+        if (hitReactionTimer <= 0f || visualRoot == null)
+            return;
+
+        hitReactionTimer -= Time.deltaTime;
+        float progress = 1f - Mathf.Clamp01(hitReactionTimer / hitReactionDuration);
+        float punch = Mathf.Sin(progress * Mathf.PI);
+        float flash = 1f - Mathf.Clamp01(progress * 1.35f);
+
+        visualRoot.localPosition += transform.InverseTransformDirection(hitReactionDirection) * (punch * 0.16f);
+        visualRoot.localScale = Vector3.one + new Vector3(0.05f, -0.035f, 0.05f) * punch;
+        ApplyHitFlash(flash);
+
+        if (hitReactionTimer <= 0f)
+        {
+            visualRoot.localScale = Vector3.one;
+            ApplyHitFlash(0f);
+        }
+    }
+
+    private void ApplyHitFlash(float amount)
+    {
+        if (renderers == null || renderers.Length == 0)
+            return;
+
+        if (hitPropertyBlock == null)
+        {
+            hitPropertyBlock = new MaterialPropertyBlock();
+        }
+
+        Color flashColor = Color.Lerp(baseColor, Color.white, amount);
+        Color emissionColor = Color.Lerp(baseColor * 0.8f, Color.white * 2.4f, amount);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer targetRenderer = renderers[i];
+
+            if (targetRenderer == null || !targetRenderer.enabled)
+                continue;
+
+            targetRenderer.GetPropertyBlock(hitPropertyBlock);
+            hitPropertyBlock.SetColor("_Color", flashColor);
+            hitPropertyBlock.SetColor("_BaseColor", flashColor);
+            hitPropertyBlock.SetColor("_EmissionColor", emissionColor);
+            targetRenderer.SetPropertyBlock(hitPropertyBlock);
         }
     }
 
@@ -907,5 +1018,67 @@ public class EnemyVisual : MonoBehaviour
         {
             Destroy(existingMuzzle.gameObject);
         }
+    }
+}
+
+[RequireComponent(typeof(EnemyHealth))]
+public class EnemyHitReaction : MonoBehaviour
+{
+    [SerializeField] private float knockbackForce = 1.4f;
+    [SerializeField] private float knockbackDamping = 16f;
+    [SerializeField] private float maxKnockbackSpeed = 3.2f;
+
+    private EnemyHealth health;
+    private Vector3 knockbackVelocity;
+
+    private void Awake()
+    {
+        health = GetComponent<EnemyHealth>();
+    }
+
+    private void OnEnable()
+    {
+        if (health == null)
+        {
+            health = GetComponent<EnemyHealth>();
+        }
+
+        if (health != null)
+        {
+            health.Damaged += HandleDamaged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (health != null)
+        {
+            health.Damaged -= HandleDamaged;
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (knockbackVelocity.sqrMagnitude <= 0.0001f)
+            return;
+
+        transform.position += knockbackVelocity * Time.deltaTime;
+        float damping = 1f - Mathf.Exp(-knockbackDamping * Time.deltaTime);
+        knockbackVelocity = Vector3.Lerp(knockbackVelocity, Vector3.zero, damping);
+    }
+
+    private void HandleDamaged(float damage, Vector3 hitPoint, Vector3 hitDirection)
+    {
+        Vector3 direction = hitDirection.sqrMagnitude > 0.001f ? hitDirection.normalized : -transform.forward;
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude < 0.001f)
+        {
+            direction = -transform.forward;
+        }
+
+        float damageScale = Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(damage / 24f));
+        knockbackVelocity += direction.normalized * knockbackForce * damageScale;
+        knockbackVelocity = Vector3.ClampMagnitude(knockbackVelocity, maxKnockbackSpeed);
     }
 }
