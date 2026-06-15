@@ -113,7 +113,7 @@ public class PlayerShootTest : MonoBehaviour
         GameVfx.SpawnMuzzleFlash(start, ray.direction);
         PlayWeaponRecoil();
 
-        if (Physics.Raycast(ray, out RaycastHit hit, range))
+        if (TryGetShotHit(ray, out RaycastHit hit))
         {
             end = hit.point;
 
@@ -150,6 +150,60 @@ public class PlayerShootTest : MonoBehaviour
         }
 
         ShowRay(start, end);
+    }
+
+    private bool TryGetShotHit(Ray ray, out RaycastHit selectedHit)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(ray, range, ~0, QueryTriggerInteraction.Collide);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hitCollider = hits[i].collider;
+
+            if (hitCollider == null || hitCollider.transform.IsChildOf(transform))
+                continue;
+
+            EnemyHealth enemy = hitCollider.GetComponentInParent<EnemyHealth>();
+            if (enemy != null)
+            {
+                selectedHit = hits[i];
+                return true;
+            }
+
+            if (ShouldIgnoreShotHit(hitCollider))
+                continue;
+
+            selectedHit = hits[i];
+            return true;
+        }
+
+        selectedHit = default;
+        return false;
+    }
+
+    private bool ShouldIgnoreShotHit(Collider hitCollider)
+    {
+        if (hitCollider.isTrigger)
+            return true;
+
+        string objectName = hitCollider.name;
+        if (objectName.Contains("Floor") || objectName.Contains("Circuit") || objectName.Contains("Neon") || objectName.Contains("Decor"))
+            return true;
+
+        Transform current = hitCollider.transform;
+        while (current != null)
+        {
+            string currentName = current.name;
+            if (currentName.Contains("SpaceKit") || currentName.Contains("TempBossArena"))
+            {
+                return objectName.Contains("Room") || objectName.Contains("Floor") || objectName.Contains("Circuit") || objectName.Contains("Panel") || objectName.Contains("Gate");
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 
     private void ShowRay(Vector3 start, Vector3 end)

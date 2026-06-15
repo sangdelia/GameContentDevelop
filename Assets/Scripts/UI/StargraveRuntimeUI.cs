@@ -37,7 +37,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     }
 
     [Header("PC Test Layout")]
-    [SerializeField] private bool useStartScreen = false;
+    [SerializeField] private bool useStartScreen = true;
     [SerializeField] private Vector2 canvasSize = new Vector2(1200f, 700f);
 
     private readonly TraitOption[] traitCatalog =
@@ -170,7 +170,7 @@ public class StargraveRuntimeUI : MonoBehaviour
 
         if (useStartScreen && !isStarted && Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
         {
-            StartGame();
+            StartPcGame();
         }
 
         if (isChoosingTrait && Keyboard.current != null)
@@ -288,10 +288,12 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         startPanel = CreatePanel("StartPanel", root, new Color(0.02f, 0.04f, 0.06f, 0.86f));
         CreateText(startPanel.transform, "STARGRAVE SURVIVOR", 58, TextAnchor.MiddleCenter, new Vector2(0f, 185f), new Vector2(900f, 90f));
-        CreateText(startPanel.transform, "WASD Move   Mouse Aim   Left Click Fire   Enter Start", 26, TextAnchor.MiddleCenter, new Vector2(0f, 88f), new Vector2(900f, 45f));
+        CreateText(startPanel.transform, "Select test mode. PC is active now, Quest 2 is prepared for XR rig setup.", 24, TextAnchor.MiddleCenter, new Vector2(0f, 98f), new Vector2(900f, 55f));
+        CreateText(startPanel.transform, "PC: WASD Move   Mouse Aim   Left Click Fire   Enter", 22, TextAnchor.MiddleCenter, new Vector2(0f, 52f), new Vector2(900f, 42f));
 
-        CreateButton(startPanel.transform, "START", new Vector2(0f, -20f), new Vector2(260f, 72f), StartGame);
-        CreateButton(startPanel.transform, "QUIT", new Vector2(0f, -112f), new Vector2(260f, 62f), QuitGame);
+        CreateButton(startPanel.transform, "PC TEST", new Vector2(-150f, -42f), new Vector2(260f, 72f), StartPcGame);
+        CreateButton(startPanel.transform, "VR QUEST 2", new Vector2(150f, -42f), new Vector2(260f, 72f), StartVrGame);
+        CreateButton(startPanel.transform, "QUIT", new Vector2(0f, -132f), new Vector2(260f, 62f), QuitGame);
     }
 
     private void BuildHudPanel()
@@ -489,10 +491,40 @@ public class StargraveRuntimeUI : MonoBehaviour
         Cursor.visible = true;
     }
 
-    private void StartGame()
+    private void StartPcGame()
     {
+        StartGame(StargravePlayMode.Mode.Pc);
+    }
+
+    private void StartVrGame()
+    {
+        StartGame(StargravePlayMode.Mode.VrQuest2);
+    }
+
+    private void StartGame(StargravePlayMode.Mode mode)
+    {
+        StargravePlayMode.SetMode(mode);
         BindPlayer();
+        ApplySelectedPlayMode();
         ShowGameplay();
+    }
+
+    private void ApplySelectedPlayMode()
+    {
+        if (StargravePlayMode.IsVr)
+        {
+            Debug.Log("[Stargrave] VR Quest 2 mode selected. Current scene uses the PC dummy player until an XR Origin rig is assigned.");
+        }
+
+        if (playerShoot != null)
+        {
+            playerShoot.enabled = true;
+        }
+
+        if (playerMove != null)
+        {
+            playerMove.enabled = true;
+        }
     }
 
     private void ShowGameplay()

@@ -111,6 +111,7 @@ public static class BossArenaBuilder
         instance.transform.localPosition = localPosition;
         instance.transform.localRotation = localRotation;
         instance.transform.localScale = localScale;
+        RemoveCollidersRecursive(instance);
 
         return instance;
     }
@@ -155,6 +156,15 @@ public static class BossArenaBuilder
         foreach (Transform child in target.transform)
         {
             SetLayerRecursive(child.gameObject, layer);
+        }
+    }
+
+    private static void RemoveCollidersRecursive(GameObject target)
+    {
+        Collider[] colliders = target.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Object.Destroy(colliders[i]);
         }
     }
 }

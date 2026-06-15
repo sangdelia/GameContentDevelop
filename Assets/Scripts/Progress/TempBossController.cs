@@ -24,11 +24,11 @@ public class TempBossController : MonoBehaviour
     [Header("Melee")]
     [SerializeField] private float closeAttackDamage = 18f;
     [SerializeField] private float meleeAttackCooldown = 1.35f;
-    [SerializeField] private float meleeAttackDuration = 0.95f;
-    [SerializeField] private float meleeImpactDelay = 0.32f;
-    [SerializeField] private float meleeHitboxActiveTime = 0.38f;
-    [SerializeField] private Vector3 meleeDetectionOffset = new Vector3(0f, 0.85f, 1.05f);
-    [SerializeField] private Vector3 meleeDetectionSize = new Vector3(5.5f, 3f, 5.8f);
+    [SerializeField] private float meleeAttackDuration = 1.05f;
+    [SerializeField] private float meleeImpactDelay = 0.46f;
+    [SerializeField] private float meleeHitboxActiveTime = 0.28f;
+    [SerializeField] private Vector3 meleeDetectionOffset = new Vector3(0f, 0.8f, 0.55f);
+    [SerializeField] private Vector3 meleeDetectionSize = new Vector3(3.1f, 2.4f, 3.05f);
 
     [Header("Laser")]
     [SerializeField] private float deathBeamDamage = 55f;
@@ -262,7 +262,7 @@ public class TempBossController : MonoBehaviour
 
         SetState(BossState.MeleeAttack);
         nextMeleeAttackTime = Time.time + meleeAttackCooldown;
-        PlayBossAnimation("Attack1", meleeAttackDuration);
+        PlayBossAnimation("Attack4", meleeAttackDuration);
 
         yield return new WaitForSeconds(meleeImpactDelay);
 
@@ -587,10 +587,8 @@ public class TempBossController : MonoBehaviour
         meleeDetectionBox.Init(this);
 
         List<BossMeleeHitbox> hitboxes = new List<BossMeleeHitbox>();
-        AddBoneHitbox(hitboxes, "LeftArm", new[] { "leftarm", "left_arm", "arm_l", "l_arm", "lefthand", "hand_l", "l_hand" }, new Vector3(0.8f, 0.8f, 1.4f));
-        AddBoneHitbox(hitboxes, "RightArm", new[] { "rightarm", "right_arm", "arm_r", "r_arm", "righthand", "hand_r", "r_hand" }, new Vector3(0.8f, 0.8f, 1.4f));
-        AddBoneHitbox(hitboxes, "LeftLeg", new[] { "leftleg", "left_leg", "leg_l", "l_leg", "leftfoot", "foot_l", "l_foot" }, new Vector3(0.75f, 0.95f, 1.1f));
-        AddBoneHitbox(hitboxes, "RightLeg", new[] { "rightleg", "right_leg", "leg_r", "r_leg", "rightfoot", "foot_r", "r_foot" }, new Vector3(0.75f, 0.95f, 1.1f));
+        AddBoneHitbox(hitboxes, "LeftLeg", new[] { "leftleg", "left_leg", "leg_l", "l_leg", "leftfoot", "foot_l", "l_foot", "lefttoe", "toe_l", "l_toe", "thigh_l", "calf_l", "shin_l" }, new Vector3(0.48f, 0.58f, 0.82f));
+        AddBoneHitbox(hitboxes, "RightLeg", new[] { "rightleg", "right_leg", "leg_r", "r_leg", "rightfoot", "foot_r", "r_foot", "righttoe", "toe_r", "r_toe", "thigh_r", "calf_r", "shin_r" }, new Vector3(0.48f, 0.58f, 0.82f));
         meleeHitboxes = hitboxes.ToArray();
         EnableMeleeHitboxes(false);
     }
