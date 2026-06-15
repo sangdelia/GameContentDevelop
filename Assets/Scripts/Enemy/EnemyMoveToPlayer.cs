@@ -5,6 +5,8 @@ public class EnemyMoveToPlayer : MonoBehaviour
     [Header("Move")]
     [SerializeField] private float moveSpeed = 2f;
     [SerializeField] private float stopDistance = 1.2f;
+    [SerializeField] private float bodySeparationDistance = 2.05f;
+    [SerializeField] private float bodySeparationSpeed = 18f;
 
     [Header("Attack")]
     [SerializeField] private float attackDamage = 10f;
@@ -21,6 +23,7 @@ public class EnemyMoveToPlayer : MonoBehaviour
         attackDamage = damage;
         attackInterval = interval;
         stopDistance = stoppingDistance;
+        bodySeparationDistance = Mathf.Max(bodySeparationDistance, stopDistance + 0.25f);
     }
 
     public void Init(Transform target)
@@ -50,13 +53,19 @@ public class EnemyMoveToPlayer : MonoBehaviour
 
         float distance = direction.magnitude;
 
+        if (distance < bodySeparationDistance)
+        {
+            PushOutFromPlayer(direction, distance);
+        }
+
         if (distance <= stopDistance)
         {
             TryAttack();
             return;
         }
 
-        Vector3 move = direction.normalized * moveSpeed * Time.deltaTime;
+        float moveDistance = Mathf.Min(moveSpeed * Time.deltaTime, Mathf.Max(0f, distance - stopDistance));
+        Vector3 move = direction.normalized * moveDistance;
         transform.position += move;
 
         if (direction != Vector3.zero)
@@ -82,5 +91,31 @@ public class EnemyMoveToPlayer : MonoBehaviour
         }
 
         playerHealth.TakeDamage(attackDamage);
+    }
+
+    private void PushOutFromPlayer(Vector3 directionToPlayer, float distance)
+    {
+        Vector3 awayFromPlayer;
+
+        if (distance > 0.001f)
+        {
+            awayFromPlayer = -directionToPlayer.normalized;
+        }
+        else
+        {
+            awayFromPlayer = -transform.forward;
+            awayFromPlayer.y = 0f;
+
+            if (awayFromPlayer.sqrMagnitude < 0.001f)
+            {
+                awayFromPlayer = Vector3.back;
+            }
+
+            awayFromPlayer.Normalize();
+        }
+
+        Vector3 desiredPosition = player.position + awayFromPlayer * bodySeparationDistance;
+        desiredPosition.y = transform.position.y;
+        transform.position = Vector3.Lerp(transform.position, desiredPosition, 1f - Mathf.Exp(-bodySeparationSpeed * Time.deltaTime));
     }
 }

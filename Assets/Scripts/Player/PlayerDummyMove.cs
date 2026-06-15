@@ -211,6 +211,9 @@ public class PlayerDummyMove : MonoBehaviour
 
         GameObject hitObject = hit.collider.gameObject;
 
+        if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
+            return true;
+
         if (hitObject.CompareTag("Ground"))
             return true;
 
