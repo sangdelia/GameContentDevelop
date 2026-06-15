@@ -18,9 +18,9 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float deathBeamVisibleTime = 0.18f;
     [SerializeField] private float patternInterval = 3.2f;
     [SerializeField] private float fightStartGraceTime = 3f;
-    [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -0.95f, 0f);
+    [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -1.05f, 0f);
     [SerializeField] private Vector3 toiletMechLocalRotation = new Vector3(0f, 180f, 0f);
-    [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.15f;
+    [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.28f;
 
     private Transform player;
     private PlayerHealth playerHealth;
@@ -40,6 +40,9 @@ public class TempBossController : MonoBehaviour
     private Transform leftWeapon;
     private Transform rightWeapon;
     private Transform shoulderArray;
+    private Animator bossAnimator;
+    private bool importedBossVisuals;
+    private float animationLockUntil;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -121,9 +124,13 @@ public class TempBossController : MonoBehaviour
         direction.y = 0f;
 
         if (direction.magnitude <= closeAttackDistance)
+        {
+            PlayBossAnimation("Idle1_Toilet");
             return;
+        }
 
         transform.position += direction.normalized * moveSpeed * Time.deltaTime;
+        PlayBossAnimation("Walk_F");
     }
 
     private void FacePlayer()
@@ -164,6 +171,7 @@ public class TempBossController : MonoBehaviour
 
         if (distance <= closeAttackDistance + 1.5f)
         {
+            PlayBossAnimation("Attack1", 0.9f);
             playerHealth.TakeDamage(closeAttackDamage);
         }
     }
@@ -189,6 +197,8 @@ public class TempBossController : MonoBehaviour
 
     private void FireProjectileBurst()
     {
+        PlayBossAnimation("Attack6_Shoot", 0.95f);
+
         Vector3 origin = GetAttackOrigin();
         Vector3 baseDirection = GetAimDirectionToPlayer(origin);
 
@@ -202,6 +212,7 @@ public class TempBossController : MonoBehaviour
 
     private void DeathBeamWarning()
     {
+        PlayBossAnimation("Attack3", deathBeamWarningTime + deathBeamVisibleTime);
         StartCoroutine(DeathBeamRoutine());
     }
 
@@ -256,6 +267,7 @@ public class TempBossController : MonoBehaviour
         bossModelRoot.localScale = Vector3.one;
 
         bool importedBossApplied = TryCreateImportedToiletMechBoss();
+        importedBossVisuals = importedBossApplied;
 
         if (!importedBossApplied)
         {
@@ -273,8 +285,8 @@ public class TempBossController : MonoBehaviour
         GameObject eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         eye.name = "BossEyeCore";
         eye.transform.SetParent(transform, false);
-        eye.transform.localPosition = new Vector3(0f, 0.12f, 0.55f);
-        eye.transform.localScale = Vector3.one * 0.28f;
+        eye.transform.localPosition = importedBossApplied ? new Vector3(0f, 0.58f, 0.92f) : new Vector3(0f, 0.12f, 0.55f);
+        eye.transform.localScale = Vector3.one * (importedBossApplied ? 0.22f : 0.28f);
         Destroy(eye.GetComponent<Collider>());
         ApplyBossMaterial(eye, new Color(1f, 0.05f, 0.05f), 2.4f);
         eyeCore = eye.transform;
@@ -282,9 +294,9 @@ public class TempBossController : MonoBehaviour
         bossAura = GameVfx.CreatePersistentVfxQuad(
             "BossCoreAuraSprite",
             transform,
-            new Vector3(0f, 0.15f, 0.64f),
+            importedBossApplied ? new Vector3(0f, 0.58f, 1.04f) : new Vector3(0f, 0.15f, 0.64f),
             Quaternion.identity,
-            Vector3.one * 1.35f,
+            Vector3.one * (importedBossApplied ? 1.05f : 1.35f),
             "circle_05",
             new Color(1f, 0.1f, 0.55f, 0.86f)
         );
@@ -315,6 +327,14 @@ public class TempBossController : MonoBehaviour
         instance.transform.localPosition = toiletMechLocalPosition;
         instance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
         instance.transform.localScale = toiletMechLocalScale;
+        bossAnimator = instance.GetComponentInChildren<Animator>();
+
+        if (bossAnimator != null)
+        {
+            bossAnimator.applyRootMotion = false;
+            bossAnimator.speed = 1f;
+            bossAnimator.Play("Idle1_Toilet", 0, 0f);
+        }
 
         Collider[] colliders = instance.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; i++)
@@ -357,12 +377,13 @@ public class TempBossController : MonoBehaviour
         if (bossAura != null)
         {
             bossAura.localRotation = Quaternion.Euler(0f, 0f, Time.time * 95f);
-            bossAura.localScale = Vector3.one * (1.25f + Mathf.Sin(Time.time * 6.2f) * 0.12f);
+            float auraBaseSize = importedBossVisuals ? 0.95f : 1.25f;
+            bossAura.localScale = Vector3.one * (auraBaseSize + Mathf.Sin(Time.time * 6.2f) * 0.12f);
         }
 
         if (bossModelRoot != null)
         {
-            bossModelRoot.localPosition = Vector3.up * (Mathf.Sin(Time.time * 2.4f) * 0.06f);
+            bossModelRoot.localPosition = importedBossVisuals ? Vector3.zero : Vector3.up * (Mathf.Sin(Time.time * 2.4f) * 0.06f);
         }
 
         if (leftWeapon != null)
@@ -452,7 +473,9 @@ public class TempBossController : MonoBehaviour
 
     private Vector3 GetAttackOrigin()
     {
-        return transform.position + Vector3.up * 0.85f + transform.forward * 1.7f;
+        float height = importedBossVisuals ? 1.65f : 0.85f;
+        float forwardOffset = importedBossVisuals ? 2.45f : 1.7f;
+        return transform.position + Vector3.up * height + transform.forward * forwardOffset;
     }
 
     private Vector3 GetPlayerAimPoint()
@@ -571,6 +594,7 @@ public class TempBossController : MonoBehaviour
 
     private void HandleDied(EnemyHealth enemy)
     {
+        PlayBossAnimation("Death1", 1.2f);
         GameVfx.SpawnLevelUp(transform.position);
         GameVfx.SpawnEnemyDeathBurst(transform.position + Vector3.up * 1.5f);
         GameVfx.SpawnEnemyDeathBurst(transform.position + transform.right * 1.8f + Vector3.up);
@@ -582,6 +606,27 @@ public class TempBossController : MonoBehaviour
         if (ui != null)
         {
             ui.ShowClear();
+        }
+    }
+
+    private void PlayBossAnimation(string stateName, float lockDuration = 0f)
+    {
+        if (bossAnimator == null)
+            return;
+
+        if (Time.time < animationLockUntil && lockDuration <= 0f)
+            return;
+
+        AnimatorStateInfo currentState = bossAnimator.GetCurrentAnimatorStateInfo(0);
+
+        if (currentState.IsName(stateName) && lockDuration <= 0f)
+            return;
+
+        bossAnimator.CrossFadeInFixedTime(stateName, 0.12f, 0);
+
+        if (lockDuration > 0f)
+        {
+            animationLockUntil = Time.time + lockDuration;
         }
     }
 }

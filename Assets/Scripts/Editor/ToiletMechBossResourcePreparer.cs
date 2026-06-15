@@ -6,6 +6,13 @@ public static class ToiletMechBossResourcePreparer
 {
     private const string TargetFolder = "Assets/Resources/Models/Boss";
     private const string TargetPrefabPath = TargetFolder + "/ToiletMech_Boss.prefab";
+    private static readonly string[] PreferredSourcePaths =
+    {
+        "Assets/Sci-Fi ToiletMech/Prefab/Sci-Fi ToiletMech Skin 1.prefab",
+        "Assets/Sci-Fi ToiletMech/Prefab/Sci-Fi ToiletMech Skin 2.prefab",
+        "Assets/Sci-Fi ToiletMech/Prefab/Sci-Fi ToiletMech Skin 3.prefab",
+        "Assets/Sci-Fi ToiletMech/Prefab/Sci-Fi ToiletMech Skin 4.prefab"
+    };
 
     [MenuItem("Stargrave/Prepare ToiletMech Boss Resource")]
     public static void Prepare()
@@ -44,6 +51,14 @@ public static class ToiletMechBossResourcePreparer
 
     private static string FindToiletMechAssetPath()
     {
+        for (int i = 0; i < PreferredSourcePaths.Length; i++)
+        {
+            if (File.Exists(PreferredSourcePaths[i]))
+            {
+                return PreferredSourcePaths[i];
+            }
+        }
+
         string[] guids = AssetDatabase.FindAssets("ToiletMech t:GameObject");
 
         if (guids.Length == 0)
@@ -56,7 +71,7 @@ public static class ToiletMechBossResourcePreparer
             string path = AssetDatabase.GUIDToAssetPath(guids[i]);
             string lowerPath = path.ToLowerInvariant();
 
-            if (lowerPath.Contains("toilet") && lowerPath.Contains("mech"))
+            if (lowerPath.Contains("toiletmech") && lowerPath.Contains("/prefab/") && !lowerPath.Contains("props"))
             {
                 return path;
             }
