@@ -6,30 +6,51 @@ public class TempBossController : MonoBehaviour
 {
     private const string ToiletMechBossResourcePath = "Models/Boss/ToiletMech_Boss";
 
+    private enum BossState
+    {
+        Idle,
+        Chase,
+        MeleeAttack,
+        LaserAttack,
+        FlameAttack,
+        Dead
+    }
+
+    [Header("Movement")]
     [SerializeField] private float moveSpeed = 3.2f;
     [SerializeField] private float closeAttackDistance = 4f;
+    [SerializeField] private float fightStartGraceTime = 3f;
+
+    [Header("Melee")]
     [SerializeField] private float closeAttackDamage = 18f;
-    [SerializeField] private float touchDamage = 8f;
-    [SerializeField] private float touchDamageInterval = 0.8f;
-    [SerializeField] private float projectileDamage = 12f;
+    [SerializeField] private float meleeAttackCooldown = 1.35f;
+    [SerializeField] private float meleeAttackDuration = 0.95f;
+    [SerializeField] private float meleeImpactDelay = 0.32f;
+    [SerializeField] private float meleeHitboxActiveTime = 0.38f;
+    [SerializeField] private Vector3 meleeDetectionOffset = new Vector3(0f, 0.85f, 1.05f);
+    [SerializeField] private Vector3 meleeDetectionSize = new Vector3(5.5f, 3f, 5.8f);
+
+    [Header("Laser")]
     [SerializeField] private float deathBeamDamage = 55f;
     [SerializeField] private float deathBeamRange = 45f;
     [SerializeField] private float deathBeamRadius = 0.55f;
     [SerializeField] private float deathBeamWarningTime = 1.4f;
+    [SerializeField] private float deathBeamFireDelay = 0.18f;
     [SerializeField] private float deathBeamVisibleTime = 0.18f;
-    [SerializeField] private float flameThrowerDamage = 9999f;
+
+    [Header("Flame Thrower")]
     [SerializeField] private float flameThrowerRange = 10f;
     [SerializeField] private float flameThrowerAngle = 54f;
     [SerializeField] private float flameThrowerWarningTime = 0.45f;
     [SerializeField] private float flameThrowerActiveTime = 0.85f;
+
+    [Header("Pattern")]
     [SerializeField] private float patternInterval = 3.2f;
-    [SerializeField] private float fightStartGraceTime = 3f;
-    [SerializeField] private float meleeImpactDelay = 0.32f;
-    [SerializeField] private float meleeHitboxActiveTime = 0.38f;
-    [SerializeField] private float projectileFireDelay = 0.34f;
-    [SerializeField] private float bossDeathDestroyDelay = 2.2f;
-    [SerializeField] private Vector3 meleeDetectionOffset = new Vector3(0f, 0.85f, 1.05f);
-    [SerializeField] private Vector3 meleeDetectionSize = new Vector3(5.5f, 3f, 5.8f);
+
+    [Header("Death")]
+    [SerializeField] private float fallbackBossDeathDestroyDelay = 2.2f;
+
+    [Header("ToiletMech Visual")]
     [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -1.05f, 0f);
     [SerializeField] private Vector3 toiletMechLocalRotation = Vector3.zero;
     [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.28f;
@@ -37,10 +58,13 @@ public class TempBossController : MonoBehaviour
     private Transform player;
     private PlayerHealth playerHealth;
     private EnemyHealth health;
+    private BossState state = BossState.Idle;
     private float patternTimer;
-    private float touchDamageTimer;
-    private int patternIndex;
+    private float nextMeleeAttackTime;
+    private float nextHitReactionTime;
+    private int rangedPatternIndex;
     private float bossStartTime;
+
     private Renderer bodyRenderer;
     private LineRenderer warningLine;
     private LineRenderer fireLine;
@@ -54,14 +78,15 @@ public class TempBossController : MonoBehaviour
     private Transform shoulderArray;
     private GameObject bossModelInstance;
     private Animator bossAnimator;
-    private bool importedBossVisuals;
-    private float animationLockUntil;
-    private float nextHitReactionTime;
-    private string currentBossAnimationName;
-    private bool playerInMeleeZone;
-    private bool meleeHitboxesActive;
+    private BossMeleeDetectionBox meleeDetectionBox;
     private BossMeleeHitbox[] meleeHitboxes;
     private readonly HashSet<PlayerHealth> meleeHitPlayers = new HashSet<PlayerHealth>();
+    private readonly HashSet<string> missingAnimatorStateLogs = new HashSet<string>();
+
+    private bool importedBossVisuals;
+    private bool playerInMeleeZone;
+    private bool meleeHitboxesActive;
+    private string currentBossAnimationName;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -74,9 +99,9 @@ public class TempBossController : MonoBehaviour
         bossObject.transform.position = position + Vector3.up * 3f;
         bossObject.transform.localScale = new Vector3(3f, 3f, 3f);
 
-        EnemyHealth health = bossObject.AddComponent<EnemyHealth>();
-        health.Configure(hp, null, 0);
-        health.SetDestroyDelay(2.2f);
+        EnemyHealth bossHealth = bossObject.AddComponent<EnemyHealth>();
+        bossHealth.Configure(hp, null, 0);
+        bossHealth.SetDestroyDelay(2.2f);
 
         TempBossController boss = bossObject.AddComponent<TempBossController>();
         boss.Init(target);
@@ -95,7 +120,7 @@ public class TempBossController : MonoBehaviour
         health = GetComponent<EnemyHealth>();
         health.Died += HandleDied;
         health.Damaged += HandleDamaged;
-        health.SetDestroyDelay(bossDeathDestroyDelay);
+        health.SetDestroyDelay(fallbackBossDeathDestroyDelay);
 
         bodyRenderer = GetComponent<Renderer>();
         bodyRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
@@ -103,11 +128,14 @@ public class TempBossController : MonoBehaviour
         bodyRenderer.material.EnableKeyword("_EMISSION");
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
         bodyRenderer.enabled = false;
+
         bossStartTime = Time.time;
         BuildBossVisuals();
 
         warningLine = CreateLine("DeathBeamWarningLine", new Color(1f, 0.05f, 0.05f, 0.75f), 0.08f);
         fireLine = CreateLine("DeathBeamFireLine", new Color(1f, 0.1f, 0.02f, 1f), deathBeamRadius * 2f);
+        UpdateDeathDestroyDelay();
+        SetState(BossState.Idle);
     }
 
     private void OnDestroy()
@@ -117,61 +145,71 @@ public class TempBossController : MonoBehaviour
             health.Died -= HandleDied;
             health.Damaged -= HandleDamaged;
         }
-
     }
 
     private void Update()
     {
         AnimateBossVisuals();
 
-        if (player == null || health.IsDead)
+        if (state == BossState.Dead || player == null || health.IsDead)
             return;
 
-        FacePlayer();
+        if (state == BossState.MeleeAttack || state == BossState.LaserAttack || state == BossState.FlameAttack)
+            return;
 
-        if (playerInMeleeZone && !IsBossActionLocked())
+        UpdateIdleOrChase();
+    }
+
+    private void UpdateIdleOrChase()
+    {
+        if (playerInMeleeZone)
         {
-            CloseShock();
+            if (Time.time >= nextMeleeAttackTime)
+            {
+                StartCoroutine(MeleeAttackRoutine());
+            }
+            else
+            {
+                SetState(BossState.Idle);
+            }
+
             return;
         }
 
+        FacePlayer();
         MoveTowardPlayer();
 
         if (Time.time - bossStartTime < fightStartGraceTime)
             return;
 
         patternTimer += Time.deltaTime;
-
         if (patternTimer >= patternInterval)
         {
             patternTimer = 0f;
-            if (!IsBossActionLocked())
-            {
-                RunNextPattern();
-            }
+            StartNextRangedPattern();
         }
     }
 
     private void MoveTowardPlayer()
     {
-        if (IsBossActionLocked())
-            return;
-
         Vector3 direction = player.position - transform.position;
         direction.y = 0f;
 
         if (direction.magnitude <= closeAttackDistance)
         {
-            PlayBossAnimation("Idle1_Toilet");
+            SetState(BossState.Idle);
             return;
         }
 
+        SetState(BossState.Chase);
         transform.position += direction.normalized * moveSpeed * Time.deltaTime;
-        PlayBossAnimation("Walk_F");
     }
 
     private void FacePlayer()
     {
+        if (state != BossState.Chase && state != BossState.Idle)
+            return;
+
         Vector3 direction = player.position - transform.position;
         direction.y = 0f;
 
@@ -181,215 +219,248 @@ public class TempBossController : MonoBehaviour
         }
     }
 
-    private void RunNextPattern()
+    private void FacePlayerForAiming()
     {
-        if (playerInMeleeZone)
+        if (state == BossState.Dead)
+            return;
+
+        Vector3 direction = player.position - transform.position;
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude > 0.001f)
         {
-            CloseShock();
+            transform.rotation = Quaternion.LookRotation(direction);
+        }
+    }
+
+    private void StartNextRangedPattern()
+    {
+        if (state != BossState.Idle && state != BossState.Chase)
+            return;
+
+        if (playerInMeleeZone && Time.time >= nextMeleeAttackTime)
+        {
+            StartCoroutine(MeleeAttackRoutine());
             return;
         }
 
-        patternIndex = (patternIndex + 1) % 3;
-
-        if (patternIndex == 0)
+        rangedPatternIndex = (rangedPatternIndex + 1) % 2;
+        if (rangedPatternIndex == 0)
         {
-            FireProjectileBurst();
-        }
-        else if (patternIndex == 1)
-        {
-            DeathBeamWarning();
+            StartCoroutine(LaserAttackRoutine());
         }
         else
         {
-            FlameThrowerWarning();
+            StartCoroutine(FlameAttackRoutine());
         }
     }
 
-    private void CloseShock()
+    private System.Collections.IEnumerator MeleeAttackRoutine()
     {
-        if (playerHealth == null || IsBossActionLocked())
-            return;
+        if (state == BossState.Dead || Time.time < nextMeleeAttackTime)
+            yield break;
 
-        PlayBossAnimation("Attack1", 0.95f);
-        StartCoroutine(CloseShockRoutine());
-    }
+        SetState(BossState.MeleeAttack);
+        nextMeleeAttackTime = Time.time + meleeAttackCooldown;
+        PlayBossAnimation("Attack1", meleeAttackDuration);
 
-    private System.Collections.IEnumerator CloseShockRoutine()
-    {
         yield return new WaitForSeconds(meleeImpactDelay);
 
-        if (health == null || health.IsDead || playerHealth == null)
+        if (state != BossState.MeleeAttack)
             yield break;
 
         EnableMeleeHitboxes(true);
         yield return new WaitForSeconds(meleeHitboxActiveTime);
         EnableMeleeHitboxes(false);
+
+        float remainingTime = Mathf.Max(0f, meleeAttackDuration - meleeImpactDelay - meleeHitboxActiveTime);
+        if (remainingTime > 0f)
+        {
+            yield return new WaitForSeconds(remainingTime);
+        }
+
+        CleanupAttackState();
+        ReturnToMovementState();
     }
 
-    private void TryTouchDamage()
+    private System.Collections.IEnumerator LaserAttackRoutine()
     {
-        if (playerHealth == null || IsBossActionLocked())
-            return;
-
-        float distance = GetFlatDistanceToPlayer();
-
-        if (distance > closeAttackDistance)
-            return;
-
-        touchDamageTimer -= Time.deltaTime;
-
-        if (touchDamageTimer > 0f)
-            return;
-
-        touchDamageTimer = touchDamageInterval;
-        PlayBossAnimation("Attack2", 0.45f);
-        playerHealth.TakeDamage(touchDamage);
-    }
-
-    private void FireProjectileBurst()
-    {
-        if (IsBossActionLocked())
-            return;
-
-        PlayBossAnimation("Attack6_Shoot", 0.95f);
-        StartCoroutine(FireProjectileBurstRoutine());
-    }
-
-    private System.Collections.IEnumerator FireProjectileBurstRoutine()
-    {
-        yield return new WaitForSeconds(projectileFireDelay);
-
-        if (health == null || health.IsDead)
+        if (state == BossState.Dead)
             yield break;
 
-        Vector3 origin = GetAttackOrigin();
-        Vector3 baseDirection = GetAimDirectionToPlayer(origin);
-
-        for (int i = -1; i <= 1; i++)
-        {
-            Quaternion spread = Quaternion.Euler(0f, i * 12f, 0f);
-            Vector3 direction = spread * baseDirection;
-            BossProjectile.Create(origin + direction * 2.2f, direction, projectileDamage);
-        }
-    }
-
-    private void DeathBeamWarning()
-    {
-        if (IsBossActionLocked())
-            return;
-
-        StartCoroutine(DeathBeamRoutine());
-    }
-
-    private void FlameThrowerWarning()
-    {
-        if (IsBossActionLocked())
-            return;
-
-        StartCoroutine(FlameThrowerRoutine());
-    }
-
-    private System.Collections.IEnumerator DeathBeamRoutine()
-    {
-        bodyRenderer.material.color = warningColor;
-        bodyRenderer.material.SetColor("_EmissionColor", warningColor * 2.2f);
+        SetState(BossState.LaserAttack);
         PlayBossAnimation("Roar", deathBeamWarningTime);
 
         Vector3 origin = GetBeamOrigin();
-        Vector3 direction = GetAimDirectionToPlayer(origin);
-        Vector3 end = GetBeamEnd(origin, direction);
+        Vector3 aimDirection = GetAimDirectionToPlayer(origin);
 
-        GameAudio.PlayBossWarning(origin);
-        warningLine.enabled = true;
-
-        float timer = 0f;
-        while (timer < deathBeamWarningTime)
+        try
         {
-            origin = GetBeamOrigin();
-            end = GetBeamEnd(origin, direction);
-            SetLine(warningLine, origin, end);
+            GameAudio.PlayBossWarning(origin);
+            ConfigureWarningLine(new Color(1f, 0.05f, 0.05f, 0.75f), 0.08f, 0.08f);
+            warningLine.enabled = true;
 
-            timer += Time.deltaTime;
-            yield return null;
+            float timer = 0f;
+            while (timer < deathBeamWarningTime)
+            {
+                FacePlayerForAiming();
+                origin = GetBeamOrigin();
+                aimDirection = GetAimDirectionToPlayer(origin);
+                SetLine(warningLine, origin, GetBeamEnd(origin, aimDirection));
+
+                timer += Time.deltaTime;
+                yield return null;
+            }
+
+            warningLine.enabled = false;
+
+            origin = GetBeamOrigin();
+            Vector3 lockedDirection = aimDirection.normalized;
+            Vector3 end = GetBeamEnd(origin, lockedDirection);
+
+            PlayBossAnimation("Attack3", deathBeamFireDelay + deathBeamVisibleTime + 0.25f);
+            yield return new WaitForSeconds(deathBeamFireDelay);
+
+            if (state != BossState.LaserAttack)
+                yield break;
+
+            SetLine(fireLine, origin, end);
+            fireLine.enabled = true;
+            GameVfx.SpawnLaserImpact(end, lockedDirection, new Color(1f, 0.12f, 0.03f));
+            GameAudio.PlayBossLaser(origin);
+            ApplyBeamDamage(origin, lockedDirection);
+
+            yield return new WaitForSeconds(deathBeamVisibleTime);
+        }
+        finally
+        {
+            CleanupAttackState();
         }
 
-        warningLine.enabled = false;
-        PlayBossAnimation("Attack3", deathBeamVisibleTime + 0.45f);
-
-        origin = GetBeamOrigin();
-        end = GetBeamEnd(origin, direction);
-        SetLine(fireLine, origin, end);
-        fireLine.enabled = true;
-        GameVfx.SpawnLaserImpact(end, direction, new Color(1f, 0.12f, 0.03f));
-
-        GameAudio.PlayBossLaser(origin);
-        ApplyBeamDamage(origin, direction);
-
-        yield return new WaitForSeconds(deathBeamVisibleTime);
-
-        fireLine.enabled = false;
-        ResetBossAttackLines();
-
-        bodyRenderer.material.color = normalColor;
-        bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
+        ReturnToMovementState();
     }
 
-    private System.Collections.IEnumerator FlameThrowerRoutine()
+    private System.Collections.IEnumerator FlameAttackRoutine()
     {
+        if (state == BossState.Dead)
+            yield break;
+
+        SetState(BossState.FlameAttack);
         PlayBossAnimation("Attack5", flameThrowerWarningTime + flameThrowerActiveTime + 0.25f);
 
         Vector3 origin = GetAttackOrigin();
-        Vector3 direction = GetAimDirectionToPlayer(origin);
-        Vector3 end = origin + direction * flameThrowerRange;
+        Vector3 aimDirection = GetAimDirectionToPlayer(origin);
 
-        warningLine.enabled = true;
-        warningLine.startWidth = 0.18f;
-        warningLine.endWidth = 1.6f;
-        warningLine.startColor = new Color(1f, 0.45f, 0.05f, 0.82f);
-        warningLine.endColor = new Color(1f, 0.05f, 0.02f, 0.35f);
-
-        float timer = 0f;
-        while (timer < flameThrowerWarningTime)
+        try
         {
-            origin = GetAttackOrigin();
-            direction = GetAimDirectionToPlayer(origin);
-            end = origin + direction * flameThrowerRange;
-            SetLine(warningLine, origin, end);
+            ConfigureWarningLine(new Color(1f, 0.45f, 0.05f, 0.82f), 0.18f, 1.6f);
+            warningLine.enabled = true;
 
-            timer += Time.deltaTime;
-            yield return null;
-        }
-
-        warningLine.enabled = false;
-        fireLine.enabled = true;
-        fireLine.startWidth = 0.7f;
-        fireLine.endWidth = 3.1f;
-        fireLine.startColor = new Color(1f, 0.58f, 0.05f, 1f);
-        fireLine.endColor = new Color(1f, 0.05f, 0.02f, 0.75f);
-        GameAudio.PlayBossLaser(origin);
-
-        timer = 0f;
-        bool hitPlayer = false;
-        while (timer < flameThrowerActiveTime)
-        {
-            origin = GetAttackOrigin();
-            direction = GetAimDirectionToPlayer(origin);
-            end = origin + direction * flameThrowerRange;
-            SetLine(fireLine, origin, end);
-            GameVfx.SpawnLaserImpact(end, direction, new Color(1f, 0.32f, 0.02f));
-
-            if (!hitPlayer && IsPlayerInsideFlameCone(origin, direction))
+            float timer = 0f;
+            while (timer < flameThrowerWarningTime)
             {
-                ApplyFlameThrowerKill(playerHealth);
-                hitPlayer = true;
+                FacePlayerForAiming();
+                origin = GetAttackOrigin();
+                aimDirection = GetAimDirectionToPlayer(origin);
+                SetLine(warningLine, origin, origin + aimDirection * flameThrowerRange);
+
+                timer += Time.deltaTime;
+                yield return null;
             }
 
-            timer += Time.deltaTime;
-            yield return null;
+            warningLine.enabled = false;
+
+            origin = GetAttackOrigin();
+            Vector3 lockedDirection = aimDirection.normalized;
+            ConfigureFireLine(new Color(1f, 0.58f, 0.05f, 1f), new Color(1f, 0.05f, 0.02f, 0.75f), 0.7f, 3.1f);
+            fireLine.enabled = true;
+            GameAudio.PlayBossLaser(origin);
+
+            timer = 0f;
+            HashSet<PlayerHealth> flameHitPlayers = new HashSet<PlayerHealth>();
+            while (timer < flameThrowerActiveTime)
+            {
+                origin = GetAttackOrigin();
+                Vector3 end = origin + lockedDirection * flameThrowerRange;
+                SetLine(fireLine, origin, end);
+                GameVfx.SpawnLaserImpact(end, lockedDirection, new Color(1f, 0.32f, 0.02f));
+
+                if (IsPlayerInsideFlameCone(origin, lockedDirection) && !flameHitPlayers.Contains(playerHealth))
+                {
+                    flameHitPlayers.Add(playerHealth);
+                    ApplyFlameThrowerKill(playerHealth);
+                }
+
+                timer += Time.deltaTime;
+                yield return null;
+            }
+        }
+        finally
+        {
+            CleanupAttackState();
         }
 
-        fireLine.enabled = false;
+        ReturnToMovementState();
+    }
+
+    private void SetState(BossState nextState)
+    {
+        if (state == BossState.Dead && nextState != BossState.Dead)
+            return;
+
+        if (state == nextState)
+            return;
+
+        state = nextState;
+
+        if (state == BossState.Idle)
+        {
+            PlayBossAnimation("Idle1_Toilet");
+        }
+        else if (state == BossState.Chase)
+        {
+            PlayBossAnimation("Walk_F");
+        }
+    }
+
+    private void ReturnToMovementState()
+    {
+        if (state == BossState.Dead || health == null || health.IsDead)
+            return;
+
+        if (playerInMeleeZone)
+        {
+            SetState(BossState.Idle);
+            return;
+        }
+
+        if (GetFlatDistanceToPlayer() > closeAttackDistance)
+        {
+            SetState(BossState.Chase);
+        }
+        else
+        {
+            SetState(BossState.Idle);
+        }
+    }
+
+    private void CleanupAttackState()
+    {
+        EnableMeleeHitboxes(false);
+
+        if (warningLine != null)
+        {
+            warningLine.enabled = false;
+        }
+
+        if (fireLine != null)
+        {
+            fireLine.enabled = false;
+        }
+
         ResetBossAttackLines();
+        bodyRenderer.material.color = normalColor;
+        bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
     }
 
     private void BuildBossVisuals()
@@ -453,7 +524,10 @@ public class TempBossController : MonoBehaviour
         GameObject prefab = Resources.Load<GameObject>(ToiletMechBossResourcePath);
 
         if (prefab == null || bossModelRoot == null)
+        {
+            Debug.LogError($"[Boss] Failed to load boss prefab. Prefab null: {prefab == null}, BossModelRoot null: {bossModelRoot == null}");
             return false;
+        }
 
         bossModelInstance = Instantiate(prefab, bossModelRoot);
         bossModelInstance.name = "Boss_ToiletMech_Model";
@@ -462,13 +536,26 @@ public class TempBossController : MonoBehaviour
         bossModelInstance.transform.localScale = toiletMechLocalScale;
         bossAnimator = bossModelInstance.GetComponentInChildren<Animator>();
 
-        if (bossAnimator != null)
+        if (bossAnimator == null)
         {
-            bossAnimator.applyRootMotion = false;
-            bossAnimator.enabled = true;
-            bossAnimator.speed = 1f;
-            PlayBossAnimation("Idle1_Toilet");
+            Debug.LogError("[Boss] CRITICAL: Animator component not found on boss model instance.");
+            return false;
         }
+
+        if (bossAnimator.runtimeAnimatorController == null)
+        {
+            Debug.LogError("[Boss] CRITICAL: Animator controller is null. Check the imported boss prefab.");
+            return false;
+        }
+
+        if (bossAnimator.avatar == null)
+        {
+            Debug.LogWarning("[Boss] Animator avatar is null. Animation may not play correctly.");
+        }
+
+        bossAnimator.applyRootMotion = false;
+        bossAnimator.enabled = true;
+        bossAnimator.speed = 1f;
 
         Collider[] colliders = bossModelInstance.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; i++)
@@ -478,7 +565,6 @@ public class TempBossController : MonoBehaviour
 
         BuildBossCombatHitboxes();
         FixImportedBossMaterials(bossModelInstance);
-
         return true;
     }
 
@@ -497,23 +583,33 @@ public class TempBossController : MonoBehaviour
         detectionBody.useGravity = false;
         detectionBody.isKinematic = true;
 
-        BossMeleeDetectionBox detection = detectionObject.AddComponent<BossMeleeDetectionBox>();
-        detection.Init(this);
+        meleeDetectionBox = detectionObject.AddComponent<BossMeleeDetectionBox>();
+        meleeDetectionBox.Init(this);
 
         List<BossMeleeHitbox> hitboxes = new List<BossMeleeHitbox>();
-        hitboxes.Add(CreateMeleeHitbox("BossLeftArmHitbox", new Vector3(-1.35f, 1.05f, 1.35f), new Vector3(1.35f, 1.15f, 2.45f)));
-        hitboxes.Add(CreateMeleeHitbox("BossRightArmHitbox", new Vector3(1.35f, 1.05f, 1.35f), new Vector3(1.35f, 1.15f, 2.45f)));
-        hitboxes.Add(CreateMeleeHitbox("BossLegSweepHitbox", new Vector3(0f, 0.45f, 1.05f), new Vector3(3.2f, 0.95f, 2.5f)));
+        AddBoneHitbox(hitboxes, "LeftArm", new[] { "leftarm", "left_arm", "arm_l", "l_arm", "lefthand", "hand_l", "l_hand" }, new Vector3(0.8f, 0.8f, 1.4f));
+        AddBoneHitbox(hitboxes, "RightArm", new[] { "rightarm", "right_arm", "arm_r", "r_arm", "righthand", "hand_r", "r_hand" }, new Vector3(0.8f, 0.8f, 1.4f));
+        AddBoneHitbox(hitboxes, "LeftLeg", new[] { "leftleg", "left_leg", "leg_l", "l_leg", "leftfoot", "foot_l", "l_foot" }, new Vector3(0.75f, 0.95f, 1.1f));
+        AddBoneHitbox(hitboxes, "RightLeg", new[] { "rightleg", "right_leg", "leg_r", "r_leg", "rightfoot", "foot_r", "r_foot" }, new Vector3(0.75f, 0.95f, 1.1f));
         meleeHitboxes = hitboxes.ToArray();
         EnableMeleeHitboxes(false);
     }
 
-    private BossMeleeHitbox CreateMeleeHitbox(string objectName, Vector3 localPosition, Vector3 size)
+    private void AddBoneHitbox(List<BossMeleeHitbox> hitboxes, string label, string[] nameHints, Vector3 size)
     {
-        GameObject hitboxObject = new GameObject(objectName);
-        hitboxObject.transform.SetParent(transform, false);
-        hitboxObject.transform.localPosition = localPosition;
+        Transform bone = FindChildByNameHints(bossModelInstance != null ? bossModelInstance.transform : null, nameHints);
+
+        if (bone == null)
+        {
+            Debug.LogError($"[Boss] Could not find {label} bone for melee hitbox. No fixed fallback hitbox was created.");
+            return;
+        }
+
+        GameObject hitboxObject = new GameObject("Boss" + label + "Hitbox");
+        hitboxObject.transform.SetParent(bone, false);
+        hitboxObject.transform.localPosition = Vector3.zero;
         hitboxObject.transform.localRotation = Quaternion.identity;
+        hitboxObject.transform.localScale = Vector3.one;
 
         BoxCollider collider = hitboxObject.AddComponent<BoxCollider>();
         collider.isTrigger = true;
@@ -526,7 +622,33 @@ public class TempBossController : MonoBehaviour
 
         BossMeleeHitbox hitbox = hitboxObject.AddComponent<BossMeleeHitbox>();
         hitbox.Init(this, collider);
-        return hitbox;
+        hitboxes.Add(hitbox);
+    }
+
+    private Transform FindChildByNameHints(Transform root, string[] hints)
+    {
+        if (root == null)
+            return null;
+
+        Transform[] children = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            string normalizedName = NormalizeName(children[i].name);
+            for (int j = 0; j < hints.Length; j++)
+            {
+                if (normalizedName.Contains(NormalizeName(hints[j])))
+                {
+                    return children[i];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private string NormalizeName(string value)
+    {
+        return value.Replace(" ", string.Empty).Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private void AnimateBossVisuals()
@@ -674,20 +796,6 @@ public class TempBossController : MonoBehaviour
         return direction.normalized;
     }
 
-    private Vector3 GetFlatDirectionToPlayer()
-    {
-        if (player == null)
-            return transform.forward;
-
-        Vector3 direction = player.position - transform.position;
-        direction.y = 0f;
-
-        if (direction.sqrMagnitude < 0.001f)
-            return transform.forward;
-
-        return direction.normalized;
-    }
-
     private float GetFlatDistanceToPlayer()
     {
         if (player == null)
@@ -717,14 +825,48 @@ public class TempBossController : MonoBehaviour
         line.SetPosition(1, end);
     }
 
-    public void SetPlayerInMeleeZone(bool inZone)
+    private void ConfigureWarningLine(Color color, float startWidth, float endWidth)
     {
-        playerInMeleeZone = inZone;
+        warningLine.startWidth = startWidth;
+        warningLine.endWidth = endWidth;
+        warningLine.startColor = color;
+        warningLine.endColor = color;
+    }
+
+    private void ConfigureFireLine(Color startColor, Color endColor, float startWidth, float endWidth)
+    {
+        fireLine.startWidth = startWidth;
+        fireLine.endWidth = endWidth;
+        fireLine.startColor = startColor;
+        fireLine.endColor = endColor;
+    }
+
+    public void AddMeleeDetectionContact(Collider contact)
+    {
+        if (state == BossState.Dead || meleeDetectionBox == null)
+            return;
+
+        meleeDetectionBox.AddContact(contact);
+        playerInMeleeZone = meleeDetectionBox.HasContacts;
+    }
+
+    public void RemoveMeleeDetectionContact(Collider contact)
+    {
+        if (meleeDetectionBox == null)
+            return;
+
+        meleeDetectionBox.RemoveContact(contact);
+        playerInMeleeZone = meleeDetectionBox.HasContacts;
+
+        if (!playerInMeleeZone && state == BossState.Idle && player != null && !health.IsDead)
+        {
+            SetState(BossState.Chase);
+        }
     }
 
     public void TryApplyMeleeHit(PlayerHealth target)
     {
-        if (!meleeHitboxesActive || target == null || meleeHitPlayers.Contains(target))
+        if (!meleeHitboxesActive || state != BossState.MeleeAttack || target == null || meleeHitPlayers.Contains(target))
             return;
 
         meleeHitPlayers.Add(target);
@@ -782,25 +924,27 @@ public class TempBossController : MonoBehaviour
         if (target == null || target.IsDead)
             return;
 
-        target.TakeDamage(flameThrowerDamage);
-
-        if (!target.IsDead)
-        {
-            target.TakeDamage(flameThrowerDamage);
-        }
+        float lethalDamage = target.CurrentHealth + target.FlatDamageReduction + 1f;
+        target.TakeDamage(lethalDamage);
     }
 
     private void ResetBossAttackLines()
     {
-        warningLine.startWidth = 0.08f;
-        warningLine.endWidth = 0.08f;
-        warningLine.startColor = new Color(1f, 0.05f, 0.05f, 0.75f);
-        warningLine.endColor = new Color(1f, 0.05f, 0.05f, 0.75f);
+        if (warningLine != null)
+        {
+            warningLine.startWidth = 0.08f;
+            warningLine.endWidth = 0.08f;
+            warningLine.startColor = new Color(1f, 0.05f, 0.05f, 0.75f);
+            warningLine.endColor = new Color(1f, 0.05f, 0.05f, 0.75f);
+        }
 
-        fireLine.startWidth = deathBeamRadius * 2f;
-        fireLine.endWidth = deathBeamRadius * 2f;
-        fireLine.startColor = new Color(1f, 0.1f, 0.02f, 1f);
-        fireLine.endColor = new Color(1f, 0.1f, 0.02f, 1f);
+        if (fireLine != null)
+        {
+            fireLine.startWidth = deathBeamRadius * 2f;
+            fireLine.endWidth = deathBeamRadius * 2f;
+            fireLine.startColor = new Color(1f, 0.1f, 0.02f, 1f);
+            fireLine.endColor = new Color(1f, 0.1f, 0.02f, 1f);
+        }
     }
 
     private void ApplyBeamDamage(Vector3 origin, Vector3 direction)
@@ -853,11 +997,19 @@ public class TempBossController : MonoBehaviour
 
     private void HandleDied(EnemyHealth enemy)
     {
+        if (state == BossState.Dead)
+            return;
+
+        SetState(BossState.Dead);
         StopAllCoroutines();
-        EnableMeleeHitboxes(false);
-        warningLine.enabled = false;
-        fireLine.enabled = false;
-        PlayBossAnimation("Death1", bossDeathDestroyDelay, true);
+        CleanupAttackState();
+
+        if (meleeDetectionBox != null)
+        {
+            meleeDetectionBox.SetEnabled(false);
+        }
+
+        PlayBossAnimation("Death1", GetAnimationLength("Death1"), true);
         GameVfx.SpawnLevelUp(transform.position);
         GameVfx.SpawnEnemyDeathBurst(transform.position + Vector3.up * 1.5f);
         GameVfx.SpawnEnemyDeathBurst(transform.position + transform.right * 1.8f + Vector3.up);
@@ -874,7 +1026,7 @@ public class TempBossController : MonoBehaviour
 
     private void HandleDamaged(float damage, Vector3 hitPoint, Vector3 hitDirection)
     {
-        if (health == null || health.IsDead || Time.time < nextHitReactionTime)
+        if (state == BossState.Dead || health == null || health.IsDead || Time.time < nextHitReactionTime)
             return;
 
         nextHitReactionTime = Time.time + 0.45f;
@@ -886,27 +1038,73 @@ public class TempBossController : MonoBehaviour
         if (bossAnimator == null)
             return;
 
-        if (!force && Time.time < animationLockUntil)
+        if (state == BossState.Dead && !force)
+            return;
+
+        if (!HasAnimatorState(stateName))
+            return;
+
+        if (!force && lockDuration <= 0f && (state == BossState.MeleeAttack || state == BossState.LaserAttack || state == BossState.FlameAttack))
             return;
 
         AnimatorStateInfo currentState = bossAnimator.GetCurrentAnimatorStateInfo(0);
-
         if (currentState.IsName(stateName) && currentBossAnimationName == stateName && lockDuration <= 0f)
             return;
 
-        float transitionDuration = lockDuration > 0f ? 0.08f : 0.16f;
+        float transitionDuration = lockDuration > 0f ? 0.08f : 0.12f;
         bossAnimator.CrossFadeInFixedTime(stateName, transitionDuration, 0);
         currentBossAnimationName = stateName;
-
-        if (lockDuration > 0f)
-        {
-            animationLockUntil = Time.time + lockDuration;
-        }
     }
 
-    private bool IsBossActionLocked()
+    private bool HasAnimatorState(string stateName)
     {
-        return Time.time < animationLockUntil;
+        if (bossAnimator == null)
+            return false;
+
+        int stateHash = Animator.StringToHash(stateName);
+        if (bossAnimator.HasState(0, stateHash))
+            return true;
+
+        if (!missingAnimatorStateLogs.Contains(stateName))
+        {
+            missingAnimatorStateLogs.Add(stateName);
+            Debug.LogError($"[Boss] Animator state '{stateName}' does not exist on layer 0. Animation was not played.");
+        }
+
+        return false;
+    }
+
+    private float GetAnimationLength(string stateName)
+    {
+        if (bossAnimator == null || bossAnimator.runtimeAnimatorController == null)
+            return fallbackBossDeathDestroyDelay;
+
+        AnimationClip[] clips = bossAnimator.runtimeAnimatorController.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i] != null && clips[i].name == stateName)
+            {
+                return clips[i].length;
+            }
+        }
+
+        for (int i = 0; i < clips.Length; i++)
+        {
+            if (clips[i] != null && clips[i].name.Contains(stateName))
+            {
+                return clips[i].length;
+            }
+        }
+
+        return fallbackBossDeathDestroyDelay;
+    }
+
+    private void UpdateDeathDestroyDelay()
+    {
+        if (health == null)
+            return;
+
+        health.SetDestroyDelay(GetAnimationLength("Death1") + 0.25f);
     }
 
     private void FixImportedBossMaterials(GameObject instance)
@@ -1018,17 +1216,48 @@ public class TempBossController : MonoBehaviour
 public class BossMeleeDetectionBox : MonoBehaviour
 {
     private TempBossController boss;
+    private BoxCollider detectionCollider;
+    private readonly HashSet<Collider> contacts = new HashSet<Collider>();
+
+    public bool HasContacts => contacts.Count > 0;
 
     public void Init(TempBossController owner)
     {
         boss = owner;
+        detectionCollider = GetComponent<BoxCollider>();
+    }
+
+    public void AddContact(Collider contact)
+    {
+        if (contact != null)
+        {
+            contacts.Add(contact);
+        }
+    }
+
+    public void RemoveContact(Collider contact)
+    {
+        if (contact != null)
+        {
+            contacts.Remove(contact);
+        }
+    }
+
+    public void SetEnabled(bool enabled)
+    {
+        contacts.Clear();
+
+        if (detectionCollider != null)
+        {
+            detectionCollider.enabled = enabled;
+        }
     }
 
     private void OnTriggerEnter(Collider other)
     {
         if (other.GetComponentInParent<PlayerHealth>() != null)
         {
-            boss.SetPlayerInMeleeZone(true);
+            boss.AddMeleeDetectionContact(other);
         }
     }
 
@@ -1036,7 +1265,7 @@ public class BossMeleeDetectionBox : MonoBehaviour
     {
         if (other.GetComponentInParent<PlayerHealth>() != null)
         {
-            boss.SetPlayerInMeleeZone(false);
+            boss.RemoveMeleeDetectionContact(other);
         }
     }
 }
@@ -1061,6 +1290,16 @@ public class BossMeleeHitbox : MonoBehaviour
     }
 
     private void OnTriggerEnter(Collider other)
+    {
+        TryHit(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        TryHit(other);
+    }
+
+    private void TryHit(Collider other)
     {
         PlayerHealth playerHealth = other.GetComponentInParent<PlayerHealth>();
         if (playerHealth != null)
