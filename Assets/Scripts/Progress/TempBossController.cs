@@ -25,7 +25,7 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float projectileFireDelay = 0.34f;
     [SerializeField] private float bossDeathDestroyDelay = 2.2f;
     [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -1.05f, 0f);
-    [SerializeField] private Vector3 toiletMechLocalRotation = new Vector3(0f, 180f, 0f);
+    [SerializeField] private Vector3 toiletMechLocalRotation = Vector3.zero;
     [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.28f;
 
     private Transform player;
@@ -148,12 +148,18 @@ public class TempBossController : MonoBehaviour
         if (patternTimer >= patternInterval)
         {
             patternTimer = 0f;
-            RunNextPattern();
+            if (!IsBossActionLocked())
+            {
+                RunNextPattern();
+            }
         }
     }
 
     private void MoveTowardPlayer()
     {
+        if (IsBossActionLocked())
+            return;
+
         Vector3 direction = player.position - transform.position;
         direction.y = 0f;
 
@@ -198,7 +204,7 @@ public class TempBossController : MonoBehaviour
 
     private void CloseShock()
     {
-        if (playerHealth == null)
+        if (playerHealth == null || IsBossActionLocked())
             return;
 
         float distance = GetFlatDistanceToPlayer();
@@ -226,7 +232,7 @@ public class TempBossController : MonoBehaviour
 
     private void TryTouchDamage()
     {
-        if (playerHealth == null)
+        if (playerHealth == null || IsBossActionLocked())
             return;
 
         float distance = GetFlatDistanceToPlayer();
@@ -246,6 +252,9 @@ public class TempBossController : MonoBehaviour
 
     private void FireProjectileBurst()
     {
+        if (IsBossActionLocked())
+            return;
+
         PlayBossAnimation("Attack6_Shoot", 0.95f);
         StartCoroutine(FireProjectileBurstRoutine());
     }
@@ -270,6 +279,9 @@ public class TempBossController : MonoBehaviour
 
     private void DeathBeamWarning()
     {
+        if (IsBossActionLocked())
+            return;
+
         StartCoroutine(DeathBeamRoutine());
     }
 
@@ -648,7 +660,7 @@ public class TempBossController : MonoBehaviour
     {
         warningLine.enabled = false;
         fireLine.enabled = false;
-        PlayBossAnimation("Death1", bossDeathDestroyDelay);
+        PlayBossAnimation("Death1", bossDeathDestroyDelay, true);
         GameVfx.SpawnLevelUp(transform.position);
         GameVfx.SpawnEnemyDeathBurst(transform.position + Vector3.up * 1.5f);
         GameVfx.SpawnEnemyDeathBurst(transform.position + transform.right * 1.8f + Vector3.up);
@@ -672,13 +684,13 @@ public class TempBossController : MonoBehaviour
         GameVfx.SpawnHitSpark(hitPoint, hitDirection, true);
     }
 
-    private void PlayBossAnimation(string stateName, float lockDuration = 0f)
+    private void PlayBossAnimation(string stateName, float lockDuration = 0f, bool force = false)
     {
         AnimationClip clip = FindBossClip(stateName);
 
         if (clip != null && bossAnimationGraph.IsValid())
         {
-            if (Time.time < animationLockUntil && lockDuration <= 0f)
+            if (!force && Time.time < animationLockUntil)
                 return;
 
             if (currentBossClip == clip && !bossAnimationBlending && lockDuration <= 0f)
@@ -697,7 +709,7 @@ public class TempBossController : MonoBehaviour
         if (bossAnimator == null)
             return;
 
-        if (Time.time < animationLockUntil && lockDuration <= 0f)
+        if (!force && Time.time < animationLockUntil)
             return;
 
         AnimatorStateInfo currentState = bossAnimator.GetCurrentAnimatorStateInfo(0);
@@ -896,6 +908,11 @@ public class TempBossController : MonoBehaviour
     private bool ShouldLoopBossClip(string stateName)
     {
         return stateName.StartsWith("Idle") || stateName.StartsWith("Walk") || stateName.StartsWith("Run");
+    }
+
+    private bool IsBossActionLocked()
+    {
+        return Time.time < animationLockUntil;
     }
 
     private void FixImportedBossMaterials(GameObject instance)
