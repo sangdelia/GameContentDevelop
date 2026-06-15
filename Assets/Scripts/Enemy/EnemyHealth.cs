@@ -13,6 +13,7 @@ public class EnemyHealth : MonoBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool logDamage = false;
+    [SerializeField] private float destroyDelay;
 
     private float currentHp;
     private bool isDead;
@@ -46,6 +47,11 @@ public class EnemyHealth : MonoBehaviour
         currentHp = maxHp;
         isDead = false;
         HealthChanged?.Invoke(currentHp, maxHp);
+    }
+
+    public void SetDestroyDelay(float delay)
+    {
+        destroyDelay = Mathf.Max(0f, delay);
     }
 
     public void TakeDamage(float damage)
@@ -88,7 +94,7 @@ public class EnemyHealth : MonoBehaviour
         Died?.Invoke(this);
         EnemyKilled?.Invoke(this);
 
-        Destroy(gameObject);
+        Destroy(gameObject, destroyDelay);
     }
 
     private void DropExp()

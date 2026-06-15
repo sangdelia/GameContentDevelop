@@ -18,6 +18,9 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float deathBeamVisibleTime = 0.18f;
     [SerializeField] private float patternInterval = 3.2f;
     [SerializeField] private float fightStartGraceTime = 3f;
+    [SerializeField] private float meleeImpactDelay = 0.32f;
+    [SerializeField] private float projectileFireDelay = 0.34f;
+    [SerializeField] private float bossDeathDestroyDelay = 2.2f;
     [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -1.05f, 0f);
     [SerializeField] private Vector3 toiletMechLocalRotation = new Vector3(0f, 180f, 0f);
     [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.28f;
@@ -43,6 +46,7 @@ public class TempBossController : MonoBehaviour
     private Animator bossAnimator;
     private bool importedBossVisuals;
     private float animationLockUntil;
+    private float nextHitReactionTime;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -57,6 +61,7 @@ public class TempBossController : MonoBehaviour
 
         EnemyHealth health = bossObject.AddComponent<EnemyHealth>();
         health.Configure(hp, null, 0);
+        health.SetDestroyDelay(2.2f);
 
         TempBossController boss = bossObject.AddComponent<TempBossController>();
         boss.Init(target);
@@ -74,6 +79,8 @@ public class TempBossController : MonoBehaviour
     {
         health = GetComponent<EnemyHealth>();
         health.Died += HandleDied;
+        health.Damaged += HandleDamaged;
+        health.SetDestroyDelay(bossDeathDestroyDelay);
 
         bodyRenderer = GetComponent<Renderer>();
         bodyRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
@@ -93,6 +100,7 @@ public class TempBossController : MonoBehaviour
         if (health != null)
         {
             health.Died -= HandleDied;
+            health.Damaged -= HandleDamaged;
         }
     }
 
@@ -172,7 +180,21 @@ public class TempBossController : MonoBehaviour
         if (distance <= closeAttackDistance + 1.5f)
         {
             PlayBossAnimation("Attack1", 0.9f);
+            StartCoroutine(CloseShockRoutine());
+        }
+    }
+
+    private System.Collections.IEnumerator CloseShockRoutine()
+    {
+        yield return new WaitForSeconds(meleeImpactDelay);
+
+        if (health == null || health.IsDead || playerHealth == null)
+            yield break;
+
+        if (GetFlatDistanceToPlayer() <= closeAttackDistance + 1.8f)
+        {
             playerHealth.TakeDamage(closeAttackDamage);
+            GameVfx.SpawnEnemyDeathBurst(transform.position + transform.forward * 1.4f + Vector3.up * 0.4f);
         }
     }
 
@@ -192,12 +214,22 @@ public class TempBossController : MonoBehaviour
             return;
 
         touchDamageTimer = touchDamageInterval;
+        PlayBossAnimation("Attack2", 0.45f);
         playerHealth.TakeDamage(touchDamage);
     }
 
     private void FireProjectileBurst()
     {
         PlayBossAnimation("Attack6_Shoot", 0.95f);
+        StartCoroutine(FireProjectileBurstRoutine());
+    }
+
+    private System.Collections.IEnumerator FireProjectileBurstRoutine()
+    {
+        yield return new WaitForSeconds(projectileFireDelay);
+
+        if (health == null || health.IsDead)
+            yield break;
 
         Vector3 origin = GetAttackOrigin();
         Vector3 baseDirection = GetAimDirectionToPlayer(origin);
@@ -212,7 +244,6 @@ public class TempBossController : MonoBehaviour
 
     private void DeathBeamWarning()
     {
-        PlayBossAnimation("Attack3", deathBeamWarningTime + deathBeamVisibleTime);
         StartCoroutine(DeathBeamRoutine());
     }
 
@@ -220,6 +251,7 @@ public class TempBossController : MonoBehaviour
     {
         bodyRenderer.material.color = warningColor;
         bodyRenderer.material.SetColor("_EmissionColor", warningColor * 2.2f);
+        PlayBossAnimation("Roar", deathBeamWarningTime);
 
         Vector3 origin = GetBeamOrigin();
         Vector3 direction = GetAimDirectionToPlayer(origin);
@@ -240,6 +272,7 @@ public class TempBossController : MonoBehaviour
         }
 
         warningLine.enabled = false;
+        PlayBossAnimation("Attack3", deathBeamVisibleTime + 0.45f);
 
         origin = GetBeamOrigin();
         end = GetBeamEnd(origin, direction);
@@ -269,24 +302,23 @@ public class TempBossController : MonoBehaviour
         bool importedBossApplied = TryCreateImportedToiletMechBoss();
         importedBossVisuals = importedBossApplied;
 
-        if (!importedBossApplied)
-        {
-            CreateBossModelPart("Models/KenneySpace/room-small-variation", "BossArmoredShell", new Vector3(0f, -0.05f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.2f, normalColor, 0.8f);
-            CreateBossModelPart("Models/SpaceStation/computer-system", "BossReactorTorso", new Vector3(0f, 0.08f, 0.08f), Quaternion.identity, Vector3.one * 2.8f, normalColor, 1.1f);
-            CreateBossModelPart("Models/KenneySpace/template-wall-detail-a", "BossBackArmor", new Vector3(0f, 0.2f, -0.58f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.6f, new Color(0.25f, 0.08f, 0.36f), 0.7f);
-            leftWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossLeftEmitter", new Vector3(-1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, -8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(0.1f, 0.85f, 1f), 1.6f);
-            rightWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossRightEmitter", new Vector3(1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, 8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(1f, 0.2f, 0.75f), 1.5f);
-            shoulderArray = CreateBossModelPart("Models/KenneySpace/cables", "BossShoulderCableArray", new Vector3(0f, 0.86f, -0.12f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.3f, new Color(0.08f, 0.9f, 1f), 1.0f);
-        }
+        if (importedBossApplied)
+            return;
 
+        CreateBossModelPart("Models/KenneySpace/room-small-variation", "BossArmoredShell", new Vector3(0f, -0.05f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.2f, normalColor, 0.8f);
+        CreateBossModelPart("Models/SpaceStation/computer-system", "BossReactorTorso", new Vector3(0f, 0.08f, 0.08f), Quaternion.identity, Vector3.one * 2.8f, normalColor, 1.1f);
+        CreateBossModelPart("Models/KenneySpace/template-wall-detail-a", "BossBackArmor", new Vector3(0f, 0.2f, -0.58f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.6f, new Color(0.25f, 0.08f, 0.36f), 0.7f);
+        leftWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossLeftEmitter", new Vector3(-1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, -8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(0.1f, 0.85f, 1f), 1.6f);
+        rightWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossRightEmitter", new Vector3(1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, 8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(1f, 0.2f, 0.75f), 1.5f);
+        shoulderArray = CreateBossModelPart("Models/KenneySpace/cables", "BossShoulderCableArray", new Vector3(0f, 0.86f, -0.12f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.3f, new Color(0.08f, 0.9f, 1f), 1.0f);
         topRing = CreateBossRing("TopReactorRing", new Vector3(0f, 0.82f, 0f), new Vector3(1.28f, 0.05f, 1.28f), new Color(0.1f, 0.9f, 1f));
         lowerRing = CreateBossRing("LowerReactorRing", new Vector3(0f, -0.42f, 0f), new Vector3(1.08f, 0.04f, 1.08f), new Color(1f, 0.2f, 0.9f));
 
         GameObject eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         eye.name = "BossEyeCore";
         eye.transform.SetParent(transform, false);
-        eye.transform.localPosition = importedBossApplied ? new Vector3(0f, 0.58f, 0.92f) : new Vector3(0f, 0.12f, 0.55f);
-        eye.transform.localScale = Vector3.one * (importedBossApplied ? 0.22f : 0.28f);
+        eye.transform.localPosition = new Vector3(0f, 0.12f, 0.55f);
+        eye.transform.localScale = Vector3.one * 0.28f;
         Destroy(eye.GetComponent<Collider>());
         ApplyBossMaterial(eye, new Color(1f, 0.05f, 0.05f), 2.4f);
         eyeCore = eye.transform;
@@ -294,9 +326,9 @@ public class TempBossController : MonoBehaviour
         bossAura = GameVfx.CreatePersistentVfxQuad(
             "BossCoreAuraSprite",
             transform,
-            importedBossApplied ? new Vector3(0f, 0.58f, 1.04f) : new Vector3(0f, 0.15f, 0.64f),
+            new Vector3(0f, 0.15f, 0.64f),
             Quaternion.identity,
-            Vector3.one * (importedBossApplied ? 1.05f : 1.35f),
+            Vector3.one * 1.35f,
             "circle_05",
             new Color(1f, 0.1f, 0.55f, 0.86f)
         );
@@ -594,7 +626,9 @@ public class TempBossController : MonoBehaviour
 
     private void HandleDied(EnemyHealth enemy)
     {
-        PlayBossAnimation("Death1", 1.2f);
+        warningLine.enabled = false;
+        fireLine.enabled = false;
+        PlayBossAnimation("Death1", bossDeathDestroyDelay);
         GameVfx.SpawnLevelUp(transform.position);
         GameVfx.SpawnEnemyDeathBurst(transform.position + Vector3.up * 1.5f);
         GameVfx.SpawnEnemyDeathBurst(transform.position + transform.right * 1.8f + Vector3.up);
@@ -607,6 +641,15 @@ public class TempBossController : MonoBehaviour
         {
             ui.ShowClear();
         }
+    }
+
+    private void HandleDamaged(float damage, Vector3 hitPoint, Vector3 hitDirection)
+    {
+        if (health == null || health.IsDead || Time.time < nextHitReactionTime)
+            return;
+
+        nextHitReactionTime = Time.time + 0.45f;
+        PlayBossAnimation("GetHit_F", 0.28f);
     }
 
     private void PlayBossAnimation(string stateName, float lockDuration = 0f)
