@@ -131,10 +131,13 @@ public class PlatformModeManager : MonoBehaviour
 
     private void EnsureRuntimeVrRig()
     {
-        if (xrOrigin != null && vrRig != null && xrCameraComponent != null)
+        if (xrOrigin != null && vrRig != null && xrCameraComponent != null && vrLeftController != null && vrRightController != null)
+        {
+            vrRig.Configure(GetLocomotionRoot(), xrCameraComponent, vrLeftController.transform, vrRightController.transform);
             return;
+        }
 
-        Transform playerRoot = pcPlayer != null ? pcPlayer.transform : null;
+        Transform playerRoot = GetLocomotionRoot();
         if (playerRoot == null)
             return;
 
@@ -177,6 +180,15 @@ public class PlatformModeManager : MonoBehaviour
         }
 
         vrRig.Configure(playerRoot, xrCameraComponent, vrLeftController.transform, vrRightController.transform);
+    }
+
+    private Transform GetLocomotionRoot()
+    {
+        if (pcPlayer != null)
+            return pcPlayer.transform;
+
+        PlayerLevel playerLevel = FindFirstObjectByType<PlayerLevel>();
+        return playerLevel != null ? playerLevel.transform : null;
     }
 
     private void ApplyPcObjects(bool active)

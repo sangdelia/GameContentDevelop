@@ -28,6 +28,9 @@ public class SimpleQuest2VrRig : MonoBehaviour
     private Transform leftControllerVisual;
     private Transform rightControllerVisual;
     private CapsuleCollider locomotionCollider;
+    private bool loggedMissingLeftController;
+    private bool loggedMissingRightController;
+    private bool loggedMissingHmd;
 
     public Camera XrCamera => xrCamera;
     public Transform RightController => rightController != null ? rightController : xrCamera != null ? xrCamera.transform : transform;
@@ -63,9 +66,9 @@ public class SimpleQuest2VrRig : MonoBehaviour
         if (!configured)
             return;
 
-        UpdateTrackedPose("<XRHMD>", xrCamera != null ? xrCamera.transform : null, Vector3.up * fallbackCameraHeight);
-        UpdateTrackedPose("<XRController>{LeftHand}", leftController, new Vector3(-0.28f, 1.15f, 0.42f));
-        UpdateTrackedPose("<XRController>{RightHand}", rightController, new Vector3(0.28f, 1.15f, 0.42f));
+        UpdateTrackedPose("<XRHMD>", "CenterEye", xrCamera != null ? xrCamera.transform : null, Vector3.up * fallbackCameraHeight, ref loggedMissingHmd);
+        UpdateTrackedPose("<XRController>{LeftHand}", "LeftHand", leftController, new Vector3(-0.28f, 1.15f, 0.42f), ref loggedMissingLeftController);
+        UpdateTrackedPose("<XRController>{RightHand}", "RightHand", rightController, new Vector3(0.28f, 1.15f, 0.42f), ref loggedMissingRightController);
         EnsureControllerVisuals();
         MoveFromLeftStick();
     }
@@ -253,16 +256,17 @@ public class SimpleQuest2VrRig : MonoBehaviour
         return material;
     }
 
-    private void UpdateTrackedPose(string devicePath, Transform target, Vector3 fallbackLocalPosition)
+    private void UpdateTrackedPose(string devicePath, string requiredUsage, Transform target, Vector3 fallbackLocalPosition, ref bool loggedMissingDevice)
     {
         if (target == null)
             return;
 
-        InputDevice device = InputSystem.GetDevice(devicePath);
+        InputDevice device = FindDevice(devicePath, requiredUsage);
         if (device == null)
         {
             target.localPosition = fallbackLocalPosition;
             target.localRotation = Quaternion.identity;
+            LogMissingDeviceOnce(requiredUsage, ref loggedMissingDevice);
             return;
         }
 
@@ -273,12 +277,54 @@ public class SimpleQuest2VrRig : MonoBehaviour
         target.localRotation = rotationControl != null ? rotationControl.ReadValue() : Quaternion.identity;
     }
 
+    private InputDevice FindDevice(string devicePath, string requiredUsage)
+    {
+        InputDevice device = InputSystem.GetDevice(devicePath);
+        if (device != null)
+            return device;
+
+        var devices = InputSystem.devices;
+        for (int i = 0; i < devices.Count; i++)
+        {
+            InputDevice candidate = devices[i];
+            if (candidate == null)
+                continue;
+
+            if (HasUsage(candidate, requiredUsage))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private bool HasUsage(InputDevice device, string requiredUsage)
+    {
+        for (int i = 0; i < device.usages.Count; i++)
+        {
+            if (device.usages[i].ToString() == requiredUsage)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void LogMissingDeviceOnce(string requiredUsage, ref bool logged)
+    {
+        if (logged)
+            return;
+
+        logged = true;
+        Debug.LogWarning($"[VR] OpenXR/InputSystem device with usage '{requiredUsage}' was not found. Check XR Plug-in Management loader and Quest Link/Build And Run connection.");
+    }
+
     private void MoveFromLeftStick()
     {
         if (locomotionRoot == null || xrCamera == null)
             return;
 
-        InputDevice leftDevice = InputSystem.GetDevice("<XRController>{LeftHand}");
+        InputDevice leftDevice = FindDevice("<XRController>{LeftHand}", "LeftHand");
         if (leftDevice == null)
             return;
 
