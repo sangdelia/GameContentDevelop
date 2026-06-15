@@ -19,10 +19,11 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private float flyingRangedEnemyChance = 0.15f;
 
     [Header("Spawn Settings")]
-    [SerializeField] private float spawnInterval = 1.25f;
-    [SerializeField] private float minSpawnDistance = 22f;
-    [SerializeField] private float maxSpawnDistance = 34f;
-    [SerializeField] private int maxEnemies = 36;
+    [SerializeField] private float spawnInterval = 1.35f;
+    [SerializeField] private int enemiesPerSpawnTick = 3;
+    [SerializeField] private float minSpawnDistance = 18f;
+    [SerializeField] private float maxSpawnDistance = 28f;
+    [SerializeField] private int maxEnemies = 30;
 
     [Header("Difficulty Ramp")]
     [SerializeField] private bool scaleDifficultyOverTime = true;
@@ -55,15 +56,19 @@ public class EnemySpawner : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float frontSpawnChance = 0.9f;
 
-    [SerializeField] private float frontAngle = 180f;
+    [SerializeField] private float frontAngle = 160f;
     [SerializeField] private float backAngle = 180f;
-    [SerializeField] private float frontCenterSafeAngle = 24f;
 
     [Header("Ground Check")]
     [SerializeField] private LayerMask groundLayer;
     [SerializeField] private float rayStartHeight = 20f;
     [SerializeField] private float rayDistance = 50f;
     [SerializeField] private float enemyHalfHeight = 1f;
+
+    [Header("Obstacle Check")]
+    [SerializeField] private LayerMask obstacleLayer = ~0;
+    [SerializeField] private float obstacleCheckRadius = 1.6f;
+    [SerializeField] private float obstacleCheckHeight = 1.2f;
 
     [Header("Debug")]
     [SerializeField] private bool showDebugLog = false;
@@ -96,11 +101,21 @@ public class EnemySpawner : MonoBehaviour
         {
             timer = 0f;
 
-            if (CountEnemies() < GetCurrentMaxEnemies())
-            {
-                TrySpawnEnemy();
-            }
+            TrySpawnWave();
         }
+    }
+
+    private void OnValidate()
+    {
+        spawnInterval = Mathf.Max(0.1f, spawnInterval);
+        enemiesPerSpawnTick = Mathf.Max(1, enemiesPerSpawnTick);
+        minSpawnDistance = Mathf.Max(1f, minSpawnDistance);
+        maxSpawnDistance = Mathf.Max(minSpawnDistance + 1f, maxSpawnDistance);
+        maxEnemies = Mathf.Max(1, maxEnemies);
+        frontAngle = Mathf.Clamp(frontAngle, 1f, 180f);
+        backAngle = Mathf.Clamp(backAngle, 1f, 180f);
+        obstacleCheckRadius = Mathf.Max(0.1f, obstacleCheckRadius);
+        obstacleCheckHeight = Mathf.Max(0.1f, obstacleCheckHeight);
     }
 
     private void UpdateViewDirection()
@@ -140,7 +155,23 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
-    private void TrySpawnEnemy()
+    private void TrySpawnWave()
+    {
+        int currentEnemyCount = CountEnemies();
+        int remainingSlots = GetCurrentMaxEnemies() - currentEnemyCount;
+
+        if (remainingSlots <= 0)
+            return;
+
+        int spawnCount = Mathf.Min(enemiesPerSpawnTick, remainingSlots);
+
+        for (int i = 0; i < spawnCount; i++)
+        {
+            TrySpawnEnemy();
+        }
+    }
+
+    private bool TrySpawnEnemy()
     {
         for (int i = 0; i < 20; i++)
         {
@@ -161,7 +192,7 @@ public class EnemySpawner : MonoBehaviour
                     Debug.Log($"Enemy spawned / source: camera forward / area: {area} / angle: {usedAngle:F1}");
                 }
 
-                return;
+                return true;
             }
         }
 
@@ -169,6 +200,8 @@ public class EnemySpawner : MonoBehaviour
         {
             Debug.LogWarning("Enemy spawn failed: no valid ground position found.");
         }
+
+        return false;
     }
 
     private void SetupSpawnedEnemy(GameObject enemy)
@@ -271,6 +304,11 @@ public class EnemySpawner : MonoBehaviour
 
         spawnPosition = hit.point + Vector3.up * enemyHalfHeight;
 
+        if (IsSpawnBlocked(spawnPosition))
+        {
+            return false;
+        }
+
         if (showDebugRay)
         {
             Debug.DrawLine(player.position + Vector3.up * 1.2f, spawnPosition, isFront ? Color.green : Color.red, 1.5f);
@@ -286,10 +324,7 @@ public class EnemySpawner : MonoBehaviour
         if (isFront)
         {
             float halfFront = frontAngle * 0.5f;
-            float halfSafe = Mathf.Min(frontCenterSafeAngle * 0.5f, halfFront - 1f);
-            usedAngle = Random.value < 0.5f
-                ? Random.Range(-halfFront, -halfSafe)
-                : Random.Range(halfSafe, halfFront);
+            usedAngle = Random.Range(-halfFront, halfFront);
         }
         else
         {
@@ -304,6 +339,47 @@ public class EnemySpawner : MonoBehaviour
         direction.Normalize();
 
         return direction;
+    }
+
+    private bool IsSpawnBlocked(Vector3 spawnPosition)
+    {
+        Vector3 checkCenter = spawnPosition + Vector3.up * obstacleCheckHeight;
+        Collider[] hits = Physics.OverlapSphere(checkCenter, obstacleCheckRadius, obstacleLayer, QueryTriggerInteraction.Ignore);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i];
+
+            if (ShouldIgnoreSpawnBlocker(hit))
+                continue;
+
+            if (showDebugLog)
+            {
+                Debug.Log($"Enemy spawn blocked by {hit.name}");
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool ShouldIgnoreSpawnBlocker(Collider hit)
+    {
+        if (hit == null)
+            return true;
+
+        if (hit.GetComponentInParent<PlayerLevel>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<EnemyHealth>() != null)
+            return true;
+
+        if (hit.CompareTag("Ground"))
+            return true;
+
+        string objectName = hit.name;
+        return objectName.Contains("Ground") || objectName.Contains("Floor") || objectName.Contains("Projectile");
     }
 
     private int CountEnemies()
