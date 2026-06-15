@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(EnemyHealth))]
@@ -43,10 +44,16 @@ public class TempBossController : MonoBehaviour
     private Transform leftWeapon;
     private Transform rightWeapon;
     private Transform shoulderArray;
+    private GameObject bossModelInstance;
     private Animator bossAnimator;
     private bool importedBossVisuals;
     private float animationLockUntil;
     private float nextHitReactionTime;
+    private readonly Dictionary<string, AnimationClip> bossClips = new Dictionary<string, AnimationClip>();
+    private AnimationClip currentBossClip;
+    private float currentBossClipTime;
+    private bool currentBossClipLoops;
+    private string currentBossClipName;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -106,13 +113,14 @@ public class TempBossController : MonoBehaviour
 
     private void Update()
     {
+        AnimateBossVisuals();
+
         if (player == null || health.IsDead)
             return;
 
         FacePlayer();
         MoveTowardPlayer();
         TryTouchDamage();
-        AnimateBossVisuals();
 
         if (Time.time - bossStartTime < fightStartGraceTime)
             return;
@@ -354,42 +362,36 @@ public class TempBossController : MonoBehaviour
         if (prefab == null || bossModelRoot == null)
             return false;
 
-        GameObject instance = Instantiate(prefab, bossModelRoot);
-        instance.name = "Boss_ToiletMech_Model";
-        instance.transform.localPosition = toiletMechLocalPosition;
-        instance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
-        instance.transform.localScale = toiletMechLocalScale;
-        bossAnimator = instance.GetComponentInChildren<Animator>();
+        bossModelInstance = Instantiate(prefab, bossModelRoot);
+        bossModelInstance.name = "Boss_ToiletMech_Model";
+        bossModelInstance.transform.localPosition = toiletMechLocalPosition;
+        bossModelInstance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
+        bossModelInstance.transform.localScale = toiletMechLocalScale;
+        bossAnimator = bossModelInstance.GetComponentInChildren<Animator>();
 
         if (bossAnimator != null)
         {
             bossAnimator.applyRootMotion = false;
-            bossAnimator.speed = 1f;
-            bossAnimator.Play("Idle1_Toilet", 0, 0f);
+            RegisterBossAnimationClips(bossAnimator.runtimeAnimatorController);
+            bossAnimator.enabled = false;
+            PlayBossAnimation("Idle1_Toilet");
         }
 
-        Collider[] colliders = instance.GetComponentsInChildren<Collider>();
+        Collider[] colliders = bossModelInstance.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; i++)
         {
             Destroy(colliders[i]);
         }
 
-        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            Material material = renderers[i].material;
-            if (material != null && material.HasProperty("_EmissionColor"))
-            {
-                material.EnableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", new Color(0.1f, 0.75f, 1f) * 0.55f);
-            }
-        }
+        FixImportedBossMaterials(bossModelInstance);
 
         return true;
     }
 
     private void AnimateBossVisuals()
     {
+        UpdateBossAnimationClip();
+
         if (topRing != null)
         {
             topRing.Rotate(0f, 0f, 85f * Time.deltaTime, Space.Self);
@@ -654,6 +656,30 @@ public class TempBossController : MonoBehaviour
 
     private void PlayBossAnimation(string stateName, float lockDuration = 0f)
     {
+        AnimationClip clip = FindBossClip(stateName);
+
+        if (clip != null && bossModelInstance != null)
+        {
+            if (Time.time < animationLockUntil && lockDuration <= 0f)
+                return;
+
+            if (currentBossClip == clip && lockDuration <= 0f)
+                return;
+
+            currentBossClip = clip;
+            currentBossClipName = stateName;
+            currentBossClipTime = 0f;
+            currentBossClipLoops = ShouldLoopBossClip(stateName);
+            currentBossClip.SampleAnimation(bossModelInstance, 0f);
+
+            if (lockDuration > 0f)
+            {
+                animationLockUntil = Time.time + lockDuration;
+            }
+
+            return;
+        }
+
         if (bossAnimator == null)
             return;
 
@@ -670,6 +696,174 @@ public class TempBossController : MonoBehaviour
         if (lockDuration > 0f)
         {
             animationLockUntil = Time.time + lockDuration;
+        }
+    }
+
+    private void RegisterBossAnimationClips(RuntimeAnimatorController controller)
+    {
+        bossClips.Clear();
+
+        if (controller == null)
+            return;
+
+        AnimationClip[] clips = controller.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            AnimationClip clip = clips[i];
+            if (clip == null || bossClips.ContainsKey(clip.name))
+                continue;
+
+            bossClips.Add(clip.name, clip);
+        }
+    }
+
+    private AnimationClip FindBossClip(string stateName)
+    {
+        if (bossClips.TryGetValue(stateName, out AnimationClip exactClip))
+            return exactClip;
+
+        foreach (KeyValuePair<string, AnimationClip> pair in bossClips)
+        {
+            if (pair.Key.Contains(stateName))
+                return pair.Value;
+        }
+
+        return null;
+    }
+
+    private void UpdateBossAnimationClip()
+    {
+        if (currentBossClip == null || bossModelInstance == null)
+            return;
+
+        float clipLength = Mathf.Max(0.01f, currentBossClip.length);
+        currentBossClipTime += Time.deltaTime;
+
+        if (currentBossClipLoops)
+        {
+            currentBossClipTime %= clipLength;
+        }
+        else if (currentBossClipTime >= clipLength)
+        {
+            currentBossClipTime = clipLength;
+
+            if (health != null && !health.IsDead && Time.time >= animationLockUntil)
+            {
+                PlayBossAnimation("Idle1_Toilet");
+                return;
+            }
+        }
+
+        currentBossClip.SampleAnimation(bossModelInstance, currentBossClipTime);
+    }
+
+    private bool ShouldLoopBossClip(string stateName)
+    {
+        return stateName.StartsWith("Idle") || stateName.StartsWith("Walk") || stateName.StartsWith("Run");
+    }
+
+    private void FixImportedBossMaterials(GameObject instance)
+    {
+        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Material[] sourceMaterials = renderers[i].sharedMaterials;
+            Material[] runtimeMaterials = new Material[sourceMaterials.Length];
+
+            for (int j = 0; j < sourceMaterials.Length; j++)
+            {
+                runtimeMaterials[j] = CreateImportedBossMaterial(sourceMaterials[j]);
+            }
+
+            renderers[i].materials = runtimeMaterials;
+        }
+    }
+
+    private Material CreateImportedBossMaterial(Material source)
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        Material material = new Material(shader);
+
+        Texture baseTexture = GetMaterialTexture(source, "_BaseMap");
+        if (baseTexture == null)
+        {
+            baseTexture = GetMaterialTexture(source, "_MainTex");
+        }
+
+        Texture normalTexture = GetMaterialTexture(source, "_BumpMap");
+        Texture emissionTexture = GetMaterialTexture(source, "_EmissionMap");
+        Color baseColor = GetMaterialColor(source, "_Color", Color.white);
+
+        SetMaterialTexture(material, "_BaseMap", "_MainTex", baseTexture);
+        SetMaterialTexture(material, "_BumpMap", "_BumpMap", normalTexture);
+        SetMaterialTexture(material, "_EmissionMap", "_EmissionMap", emissionTexture);
+        SetMaterialColor(material, "_BaseColor", "_Color", baseColor);
+
+        if (normalTexture != null)
+        {
+            material.EnableKeyword("_NORMALMAP");
+        }
+
+        if (emissionTexture != null || material.HasProperty("_EmissionColor"))
+        {
+            material.EnableKeyword("_EMISSION");
+            SetMaterialColor(material, "_EmissionColor", "_EmissionColor", new Color(0.08f, 0.55f, 0.8f));
+        }
+
+        SetMaterialFloat(material, "_Metallic", 0.4f);
+        SetMaterialFloat(material, "_Smoothness", 0.62f);
+        SetMaterialFloat(material, "_Glossiness", 0.62f);
+        return material;
+    }
+
+    private Texture GetMaterialTexture(Material material, string property)
+    {
+        return material != null && material.HasProperty(property) ? material.GetTexture(property) : null;
+    }
+
+    private Color GetMaterialColor(Material material, string property, Color fallback)
+    {
+        return material != null && material.HasProperty(property) ? material.GetColor(property) : fallback;
+    }
+
+    private void SetMaterialTexture(Material material, string primaryProperty, string fallbackProperty, Texture texture)
+    {
+        if (texture == null)
+            return;
+
+        if (material.HasProperty(primaryProperty))
+        {
+            material.SetTexture(primaryProperty, texture);
+        }
+        else if (material.HasProperty(fallbackProperty))
+        {
+            material.SetTexture(fallbackProperty, texture);
+        }
+    }
+
+    private void SetMaterialColor(Material material, string primaryProperty, string fallbackProperty, Color color)
+    {
+        if (material.HasProperty(primaryProperty))
+        {
+            material.SetColor(primaryProperty, color);
+        }
+        else if (material.HasProperty(fallbackProperty))
+        {
+            material.SetColor(fallbackProperty, color);
+        }
+    }
+
+    private void SetMaterialFloat(Material material, string property, float value)
+    {
+        if (material.HasProperty(property))
+        {
+            material.SetFloat(property, value);
         }
     }
 }
