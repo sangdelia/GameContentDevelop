@@ -31,6 +31,10 @@ public class TempBossController : MonoBehaviour
     private Transform lowerRing;
     private Transform eyeCore;
     private Transform bossAura;
+    private Transform bossModelRoot;
+    private Transform leftWeapon;
+    private Transform rightWeapon;
+    private Transform shoulderArray;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -68,6 +72,7 @@ public class TempBossController : MonoBehaviour
         bodyRenderer.material.color = normalColor;
         bodyRenderer.material.EnableKeyword("_EMISSION");
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
+        bodyRenderer.enabled = false;
         bossStartTime = Time.time;
         BuildBossVisuals();
 
@@ -239,6 +244,19 @@ public class TempBossController : MonoBehaviour
 
     private void BuildBossVisuals()
     {
+        bossModelRoot = new GameObject("BossModelRoot").transform;
+        bossModelRoot.SetParent(transform, false);
+        bossModelRoot.localPosition = Vector3.zero;
+        bossModelRoot.localRotation = Quaternion.identity;
+        bossModelRoot.localScale = Vector3.one;
+
+        CreateBossModelPart("Models/KenneySpace/room-small-variation", "BossArmoredShell", new Vector3(0f, -0.05f, 0f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.2f, normalColor, 0.8f);
+        CreateBossModelPart("Models/SpaceStation/computer-system", "BossReactorTorso", new Vector3(0f, 0.08f, 0.08f), Quaternion.identity, Vector3.one * 2.8f, normalColor, 1.1f);
+        CreateBossModelPart("Models/KenneySpace/template-wall-detail-a", "BossBackArmor", new Vector3(0f, 0.2f, -0.58f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 1.6f, new Color(0.25f, 0.08f, 0.36f), 0.7f);
+        leftWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossLeftEmitter", new Vector3(-1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, -8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(0.1f, 0.85f, 1f), 1.6f);
+        rightWeapon = CreateBossModelPart("Models/SpaceStation/pipe-ring-colored", "BossRightEmitter", new Vector3(1.1f, 0.08f, 0.62f), Quaternion.Euler(0f, 8f, 0f), new Vector3(2.2f, 2.2f, 3.6f), new Color(1f, 0.2f, 0.75f), 1.5f);
+        shoulderArray = CreateBossModelPart("Models/KenneySpace/cables", "BossShoulderCableArray", new Vector3(0f, 0.86f, -0.12f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.3f, new Color(0.08f, 0.9f, 1f), 1.0f);
+
         topRing = CreateBossRing("TopReactorRing", new Vector3(0f, 0.82f, 0f), new Vector3(1.28f, 0.05f, 1.28f), new Color(0.1f, 0.9f, 1f));
         lowerRing = CreateBossRing("LowerReactorRing", new Vector3(0f, -0.42f, 0f), new Vector3(1.08f, 0.04f, 1.08f), new Color(1f, 0.2f, 0.9f));
 
@@ -298,6 +316,26 @@ public class TempBossController : MonoBehaviour
             bossAura.localRotation = Quaternion.Euler(0f, 0f, Time.time * 95f);
             bossAura.localScale = Vector3.one * (1.25f + Mathf.Sin(Time.time * 6.2f) * 0.12f);
         }
+
+        if (bossModelRoot != null)
+        {
+            bossModelRoot.localPosition = Vector3.up * (Mathf.Sin(Time.time * 2.4f) * 0.06f);
+        }
+
+        if (leftWeapon != null)
+        {
+            leftWeapon.localRotation = Quaternion.Euler(Mathf.Sin(Time.time * 3.6f) * 3f, -8f, 0f);
+        }
+
+        if (rightWeapon != null)
+        {
+            rightWeapon.localRotation = Quaternion.Euler(Mathf.Sin(Time.time * 3.6f + Mathf.PI) * 3f, 8f, 0f);
+        }
+
+        if (shoulderArray != null)
+        {
+            shoulderArray.localRotation = Quaternion.Euler(0f, 90f + Mathf.Sin(Time.time * 2.2f) * 5f, 0f);
+        }
     }
 
     private void ApplyBossMaterial(GameObject target, Color color, float emission)
@@ -307,6 +345,43 @@ public class TempBossController : MonoBehaviour
         renderer.material.color = color;
         renderer.material.EnableKeyword("_EMISSION");
         renderer.material.SetColor("_EmissionColor", color * emission);
+    }
+
+    private Transform CreateBossModelPart(string resourcePath, string partName, Vector3 localPosition, Quaternion localRotation, Vector3 localScale, Color color, float emission)
+    {
+        GameObject prefab = Resources.Load<GameObject>(resourcePath);
+
+        if (prefab == null || bossModelRoot == null)
+            return null;
+
+        GameObject instance = Instantiate(prefab, bossModelRoot);
+        instance.name = partName;
+        instance.transform.localPosition = localPosition;
+        instance.transform.localRotation = localRotation;
+        instance.transform.localScale = localScale;
+
+        Collider[] colliders = instance.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Destroy(colliders[i]);
+        }
+
+        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].material = CreateBossMaterial(color, emission);
+        }
+
+        return instance.transform;
+    }
+
+    private Material CreateBossMaterial(Color color, float emission)
+    {
+        Material material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        material.color = color;
+        material.EnableKeyword("_EMISSION");
+        material.SetColor("_EmissionColor", color * emission);
+        return material;
     }
 
     private LineRenderer CreateLine(string lineName, Color color, float width)
@@ -334,7 +409,7 @@ public class TempBossController : MonoBehaviour
 
     private Vector3 GetAttackOrigin()
     {
-        return new Vector3(transform.position.x, 1.35f, transform.position.z);
+        return transform.position + Vector3.up * 0.85f + transform.forward * 1.7f;
     }
 
     private Vector3 GetPlayerAimPoint()

@@ -7,6 +7,7 @@ public class BossPortal : MonoBehaviour
     private Transform ringVisual;
     private Transform portalTwirl;
     private Transform portalCircle;
+    private Transform innerGate;
     private Transform player;
     private float enterRadius = 2.2f;
 
@@ -32,6 +33,22 @@ public class BossPortal : MonoBehaviour
         rb.useGravity = false;
         rb.isKinematic = true;
 
+        CreateModel("Models/KenneySpace/template-floor-layer-hole", "PortalFloorPad", Vector3.zero, Quaternion.identity, Vector3.one * 2.8f);
+        CreateModel("Models/KenneySpace/template-wall-half", "PortalLeftPylon", new Vector3(-1.8f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.2f);
+        CreateModel("Models/KenneySpace/template-wall-half", "PortalRightPylon", new Vector3(1.8f, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), Vector3.one * 2.2f);
+
+        GameObject gateFrame = CreateModel("Models/KenneySpace/gate-door-window", "PortalGateFrame", Vector3.up * 0.08f, Quaternion.Euler(0f, 180f, 0f), Vector3.one * 2.55f);
+        if (gateFrame == null)
+        {
+            gateFrame = CreateModel("Models/KenneySpace/gate-door", "PortalGateFrame", Vector3.up * 0.08f, Quaternion.Euler(0f, 180f, 0f), Vector3.one * 2.55f);
+        }
+
+        GameObject laserGate = CreateModel("Models/KenneySpace/gate-lasers", "PortalLaserGate", Vector3.up * 0.08f, Quaternion.Euler(0f, 180f, 0f), Vector3.one * 2.55f);
+        if (laserGate != null)
+        {
+            innerGate = laserGate.transform;
+        }
+
         GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         ring.name = "PortalRing";
         ring.transform.SetParent(transform, false);
@@ -41,16 +58,6 @@ public class BossPortal : MonoBehaviour
         Destroy(ring.GetComponent<Collider>());
         ApplyMaterial(ring, new Color(0.05f, 0.85f, 1f, 0.75f));
         ringVisual = ring.transform;
-
-        GameObject gateModel = Resources.Load<GameObject>("Models/KenneySpace/gate-lasers");
-        if (gateModel != null)
-        {
-            GameObject gate = Instantiate(gateModel, transform);
-            gate.name = "PortalGateDecor";
-            gate.transform.localPosition = Vector3.up * 0.05f;
-            gate.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            gate.transform.localScale = Vector3.one * 2.25f;
-        }
 
         GameObject core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         core.name = "PortalCore";
@@ -115,6 +122,12 @@ public class BossPortal : MonoBehaviour
             portalCircle.localRotation = Quaternion.Euler(0f, 0f, -Time.time * 70f);
         }
 
+        if (innerGate != null)
+        {
+            float gatePulse = 1f + Mathf.Sin(Time.time * 6f) * 0.035f;
+            innerGate.localScale = Vector3.one * (2.55f * gatePulse);
+        }
+
         if (player == null)
         {
             PlayerLevel playerLevel = FindFirstObjectByType<PlayerLevel>();
@@ -145,5 +158,27 @@ public class BossPortal : MonoBehaviour
         renderer.material.color = color;
         renderer.material.EnableKeyword("_EMISSION");
         renderer.material.SetColor("_EmissionColor", color * 1.8f);
+    }
+
+    private GameObject CreateModel(string resourcePath, string objectName, Vector3 localPosition, Quaternion localRotation, Vector3 localScale)
+    {
+        GameObject prefab = Resources.Load<GameObject>(resourcePath);
+
+        if (prefab == null)
+            return null;
+
+        GameObject instance = Instantiate(prefab, transform);
+        instance.name = objectName;
+        instance.transform.localPosition = localPosition;
+        instance.transform.localRotation = localRotation;
+        instance.transform.localScale = localScale;
+
+        Collider[] colliders = instance.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Destroy(colliders[i]);
+        }
+
+        return instance;
     }
 }

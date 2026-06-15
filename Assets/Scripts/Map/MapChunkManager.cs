@@ -62,6 +62,20 @@ public class MapChunkManager : MonoBehaviour
         "skip"
     };
 
+    private readonly string[] modularSciFiPropResourceNames =
+    {
+        "corridor-end",
+        "corridor-transition",
+        "gate-door",
+        "gate-door-window",
+        "template-detail",
+        "template-floor-layer-raised",
+        "template-wall",
+        "template-wall-detail-a",
+        "template-wall-half",
+        "template-wall-top"
+    };
+
     private void OnValidate()
     {
         chunkSize = Mathf.Max(1f, chunkSize);
@@ -380,6 +394,10 @@ public class MapChunkManager : MonoBehaviour
             {
                 CreateTechPlate(setPieces.transform, position, random);
             }
+            else if (random.NextDouble() < 0.55)
+            {
+                CreateModularSetPiece(setPieces.transform, position, random);
+            }
             else if (random.NextDouble() < 0.65)
             {
                 CreateLightBeacon(setPieces.transform, position, random);
@@ -389,6 +407,36 @@ public class MapChunkManager : MonoBehaviour
                 CreateServiceRail(setPieces.transform, position, random);
             }
         }
+    }
+
+    private void CreateModularSetPiece(Transform parent, Vector3 localPosition, System.Random random)
+    {
+        string[] options =
+        {
+            "template-detail",
+            "template-floor-layer-raised",
+            "template-wall-half",
+            "template-wall-detail-a",
+            "corridor-end"
+        };
+
+        string resourceName = options[random.Next(0, options.Length)];
+        GameObject prefab = Resources.Load<GameObject>("Models/KenneySpace/" + resourceName);
+
+        if (prefab == null)
+        {
+            CreateTechPlate(parent, localPosition, random);
+            return;
+        }
+
+        GameObject piece = Instantiate(prefab, parent);
+        piece.name = "Floor_Modular_" + resourceName;
+        piece.transform.localPosition = localPosition;
+        piece.transform.localRotation = Quaternion.Euler(0f, RandomRange(random, 0f, 360f), 0f);
+        piece.transform.localScale = Vector3.one * RandomRange(random, 1.35f, 2.15f);
+
+        PlaceObjectOnGround(piece, 0f);
+        EnsureObstacleCollider(piece);
     }
 
     private void CreateTechPlate(Transform parent, Vector3 localPosition, System.Random random)
@@ -634,9 +682,15 @@ public class MapChunkManager : MonoBehaviour
         if (!useSciFiResourceProps)
             return;
 
-        for (int i = 0; i < sciFiPropResourceNames.Length; i++)
+        LoadResourceProps("Models/SpaceStation/", sciFiPropResourceNames);
+        LoadResourceProps("Models/KenneySpace/", modularSciFiPropResourceNames);
+    }
+
+    private void LoadResourceProps(string resourceRoot, string[] resourceNames)
+    {
+        for (int i = 0; i < resourceNames.Length; i++)
         {
-            GameObject prefab = Resources.Load<GameObject>("Models/SpaceStation/" + sciFiPropResourceNames[i]);
+            GameObject prefab = Resources.Load<GameObject>(resourceRoot + resourceNames[i]);
 
             if (prefab != null)
             {
