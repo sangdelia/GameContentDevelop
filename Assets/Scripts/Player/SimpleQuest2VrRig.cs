@@ -20,11 +20,14 @@ public class SimpleQuest2VrRig : MonoBehaviour
     [Header("Move")]
     [SerializeField] private float moveSpeed = 3.8f;
     [SerializeField] private float fallbackCameraHeight = 1.6f;
+    [SerializeField] private LayerMask collisionMask = 1;
+    [SerializeField] private float collisionSkin = 0.05f;
 
     private bool configured;
     private bool visualsBuilt;
     private Transform leftControllerVisual;
     private Transform rightControllerVisual;
+    private CapsuleCollider locomotionCollider;
 
     public Camera XrCamera => xrCamera;
     public Transform RightController => rightController != null ? rightController : xrCamera != null ? xrCamera.transform : transform;
@@ -35,6 +38,7 @@ public class SimpleQuest2VrRig : MonoBehaviour
         xrCamera = camera;
         leftController = leftHand;
         rightController = rightHand;
+        locomotionCollider = locomotionRoot != null ? locomotionRoot.GetComponent<CapsuleCollider>() : null;
         configured = true;
     }
 
@@ -44,6 +48,8 @@ public class SimpleQuest2VrRig : MonoBehaviour
         {
             locomotionRoot = transform.parent != null ? transform.parent : transform;
         }
+
+        locomotionCollider = locomotionRoot != null ? locomotionRoot.GetComponent<CapsuleCollider>() : null;
     }
 
     private void OnEnable()
@@ -302,6 +308,111 @@ public class SimpleQuest2VrRig : MonoBehaviour
             movement.Normalize();
         }
 
-        locomotionRoot.position += movement * moveSpeed * Time.deltaTime;
+        MoveWithCollision(movement * moveSpeed * Time.deltaTime);
+    }
+
+    private void MoveWithCollision(Vector3 movement)
+    {
+        if (movement.sqrMagnitude <= 0.000001f)
+            return;
+
+        if (locomotionCollider == null)
+        {
+            locomotionRoot.position += movement;
+            return;
+        }
+
+        Vector3 direction = movement.normalized;
+        float distance = movement.magnitude;
+
+        if (!CapsuleCast(direction, distance + collisionSkin, out RaycastHit hit))
+        {
+            locomotionRoot.position += movement;
+            return;
+        }
+
+        float allowedDistance = Mathf.Max(0f, hit.distance - collisionSkin);
+        locomotionRoot.position += direction * allowedDistance;
+
+        Vector3 remaining = movement - direction * allowedDistance;
+        Vector3 slide = Vector3.ProjectOnPlane(remaining, hit.normal);
+        slide.y = 0f;
+
+        if (slide.sqrMagnitude > 0.000001f && !CapsuleCast(slide.normalized, slide.magnitude + collisionSkin, out _))
+        {
+            locomotionRoot.position += slide;
+        }
+    }
+
+    private bool CapsuleCast(Vector3 direction, float distance, out RaycastHit hit)
+    {
+        GetCapsuleWorldPoints(out Vector3 point1, out Vector3 point2, out float radius);
+
+        RaycastHit[] hits = Physics.CapsuleCastAll(
+            point1,
+            point2,
+            radius,
+            direction,
+            distance,
+            collisionMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        hit = default;
+        float nearestDistance = float.MaxValue;
+        bool foundHit = false;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit candidate = hits[i];
+
+            if (candidate.collider == null)
+                continue;
+
+            if (candidate.collider == locomotionCollider || candidate.collider.transform.IsChildOf(locomotionRoot))
+                continue;
+
+            if (ShouldIgnoreMovementHit(candidate))
+                continue;
+
+            if (candidate.distance < nearestDistance)
+            {
+                nearestDistance = candidate.distance;
+                hit = candidate;
+                foundHit = true;
+            }
+        }
+
+        return foundHit;
+    }
+
+    private bool ShouldIgnoreMovementHit(RaycastHit hit)
+    {
+        if (hit.normal.y > 0.45f)
+            return true;
+
+        if (hit.collider.GetComponentInParent<TempBossController>() != null)
+            return false;
+
+        if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
+            return true;
+
+        GameObject hitObject = hit.collider.gameObject;
+        if (hitObject.CompareTag("Ground"))
+            return true;
+
+        string objectName = hitObject.name;
+        return objectName.Contains("Ground") || objectName.Contains("Floor");
+    }
+
+    private void GetCapsuleWorldPoints(out Vector3 point1, out Vector3 point2, out float radius)
+    {
+        Vector3 center = locomotionRoot.TransformPoint(locomotionCollider.center);
+        float height = Mathf.Max(locomotionCollider.height * locomotionRoot.lossyScale.y, 0.01f);
+        radius = locomotionCollider.radius * Mathf.Max(locomotionRoot.lossyScale.x, locomotionRoot.lossyScale.z);
+        float cylinderHeight = Mathf.Max(0f, height * 0.5f - radius);
+
+        point1 = center + Vector3.up * cylinderHeight;
+        point2 = center - Vector3.up * cylinderHeight;
     }
 }

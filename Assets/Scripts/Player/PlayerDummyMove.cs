@@ -211,6 +211,9 @@ public class PlayerDummyMove : MonoBehaviour
 
         GameObject hitObject = hit.collider.gameObject;
 
+        if (hit.collider.GetComponentInParent<TempBossController>() != null)
+            return false;
+
         if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
             return true;
 

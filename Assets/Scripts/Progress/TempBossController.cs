@@ -94,6 +94,9 @@ public class TempBossController : MonoBehaviour
     private bool playerInMeleeZone;
     private bool meleeHitboxesActive;
     private string currentBossAnimationName;
+    private Vector3 importedBossModelAnchorPosition;
+    private Quaternion importedBossModelAnchorRotation;
+    private Vector3 importedBossModelAnchorScale;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -166,6 +169,11 @@ public class TempBossController : MonoBehaviour
             return;
 
         UpdateIdleOrChase();
+    }
+
+    private void LateUpdate()
+    {
+        KeepImportedBossModelAnchored();
     }
 
     private void UpdateIdleOrChase()
@@ -445,7 +453,13 @@ public class TempBossController : MonoBehaviour
             yield break;
 
         EnableMeleeHitboxes(true);
-        yield return new WaitForSeconds(meleeHitboxActiveTime);
+        float activeTimer = 0f;
+        while (activeTimer < meleeHitboxActiveTime)
+        {
+            ApplyMeleeBodyContactDamage();
+            activeTimer += Time.deltaTime;
+            yield return null;
+        }
         EnableMeleeHitboxes(false);
 
         float remainingTime = Mathf.Max(0f, meleeAttackDuration - meleeImpactDelay - meleeHitboxActiveTime);
@@ -709,6 +723,9 @@ public class TempBossController : MonoBehaviour
         bossModelInstance.transform.localPosition = toiletMechLocalPosition;
         bossModelInstance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
         bossModelInstance.transform.localScale = toiletMechLocalScale;
+        importedBossModelAnchorPosition = bossModelInstance.transform.localPosition;
+        importedBossModelAnchorRotation = bossModelInstance.transform.localRotation;
+        importedBossModelAnchorScale = bossModelInstance.transform.localScale;
         bossAnimator = bossModelInstance.GetComponentInChildren<Animator>();
 
         if (bossAnimator == null)
@@ -765,6 +782,17 @@ public class TempBossController : MonoBehaviour
         bossRigidbody.useGravity = false;
         bossRigidbody.isKinematic = true;
         bossRigidbody.constraints = RigidbodyConstraints.FreezeRotation;
+    }
+
+    private void KeepImportedBossModelAnchored()
+    {
+        if (!importedBossVisuals || bossModelInstance == null || state == BossState.Dead)
+            return;
+
+        Transform modelTransform = bossModelInstance.transform;
+        modelTransform.localPosition = importedBossModelAnchorPosition;
+        modelTransform.localRotation = importedBossModelAnchorRotation;
+        modelTransform.localScale = importedBossModelAnchorScale;
     }
 
     private void BuildBossCombatHitboxes()
@@ -1069,6 +1097,30 @@ public class TempBossController : MonoBehaviour
         meleeHitPlayers.Add(target);
         target.TakeDamage(closeAttackDamage);
         GameVfx.SpawnEnemyDeathBurst(target.transform.position + Vector3.up * 0.75f);
+    }
+
+    private void ApplyMeleeBodyContactDamage()
+    {
+        if (!meleeHitboxesActive || state != BossState.MeleeAttack)
+            return;
+
+        GetBossCapsulePoints(out Vector3 point1, out Vector3 point2, out float radius);
+        Collider[] hits = Physics.OverlapCapsule(
+            point1,
+            point2,
+            radius + 0.12f,
+            ~0,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            PlayerHealth hitPlayer = hits[i].GetComponentInParent<PlayerHealth>();
+            if (hitPlayer != null)
+            {
+                TryApplyMeleeHit(hitPlayer);
+            }
+        }
     }
 
     private void EnableMeleeHitboxes(bool enabled)
