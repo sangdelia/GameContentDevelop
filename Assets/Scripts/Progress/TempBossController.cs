@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 
 [RequireComponent(typeof(EnemyHealth))]
 public class TempBossController : MonoBehaviour
@@ -50,10 +52,21 @@ public class TempBossController : MonoBehaviour
     private float animationLockUntil;
     private float nextHitReactionTime;
     private readonly Dictionary<string, AnimationClip> bossClips = new Dictionary<string, AnimationClip>();
+    private PlayableGraph bossAnimationGraph;
+    private AnimationMixerPlayable bossAnimationMixer;
+    private AnimationClipPlayable currentBossPlayable;
+    private AnimationClipPlayable nextBossPlayable;
     private AnimationClip currentBossClip;
+    private AnimationClip nextBossClip;
     private float currentBossClipTime;
+    private float nextBossClipTime;
+    private float bossBlendTimer;
+    private float bossBlendDuration;
     private bool currentBossClipLoops;
+    private bool nextBossClipLoops;
+    private bool bossAnimationBlending;
     private string currentBossClipName;
+    private string nextBossClipName;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -108,6 +121,11 @@ public class TempBossController : MonoBehaviour
         {
             health.Died -= HandleDied;
             health.Damaged -= HandleDamaged;
+        }
+
+        if (bossAnimationGraph.IsValid())
+        {
+            bossAnimationGraph.Destroy();
         }
     }
 
@@ -373,7 +391,7 @@ public class TempBossController : MonoBehaviour
         {
             bossAnimator.applyRootMotion = false;
             RegisterBossAnimationClips(bossAnimator.runtimeAnimatorController);
-            bossAnimator.enabled = false;
+            InitializeBossAnimationGraph();
             PlayBossAnimation("Idle1_Toilet");
         }
 
@@ -390,7 +408,7 @@ public class TempBossController : MonoBehaviour
 
     private void AnimateBossVisuals()
     {
-        UpdateBossAnimationClip();
+        UpdateBossAnimationPlayable();
 
         if (topRing != null)
         {
@@ -651,26 +669,22 @@ public class TempBossController : MonoBehaviour
             return;
 
         nextHitReactionTime = Time.time + 0.45f;
-        PlayBossAnimation("GetHit_F", 0.28f);
+        GameVfx.SpawnHitSpark(hitPoint, hitDirection, true);
     }
 
     private void PlayBossAnimation(string stateName, float lockDuration = 0f)
     {
         AnimationClip clip = FindBossClip(stateName);
 
-        if (clip != null && bossModelInstance != null)
+        if (clip != null && bossAnimationGraph.IsValid())
         {
             if (Time.time < animationLockUntil && lockDuration <= 0f)
                 return;
 
-            if (currentBossClip == clip && lockDuration <= 0f)
+            if (currentBossClip == clip && !bossAnimationBlending && lockDuration <= 0f)
                 return;
 
-            currentBossClip = clip;
-            currentBossClipName = stateName;
-            currentBossClipTime = 0f;
-            currentBossClipLoops = ShouldLoopBossClip(stateName);
-            currentBossClip.SampleAnimation(bossModelInstance, 0f);
+            BlendToBossClip(stateName, clip, lockDuration > 0f ? 0.08f : 0.18f);
 
             if (lockDuration > 0f)
             {
@@ -697,6 +711,75 @@ public class TempBossController : MonoBehaviour
         {
             animationLockUntil = Time.time + lockDuration;
         }
+    }
+
+    private void InitializeBossAnimationGraph()
+    {
+        if (bossAnimator == null)
+            return;
+
+        if (bossAnimationGraph.IsValid())
+        {
+            bossAnimationGraph.Destroy();
+        }
+
+        bossAnimationGraph = PlayableGraph.Create("ToiletMechBossAnimation");
+        bossAnimationGraph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+        bossAnimationMixer = AnimationMixerPlayable.Create(bossAnimationGraph, 2);
+
+        AnimationPlayableOutput output = AnimationPlayableOutput.Create(bossAnimationGraph, "BossAnimationOutput", bossAnimator);
+        output.SetSourcePlayable(bossAnimationMixer);
+        bossAnimationGraph.Play();
+    }
+
+    private void BlendToBossClip(string stateName, AnimationClip clip, float blendDuration)
+    {
+        if (!bossAnimationGraph.IsValid() || !bossAnimationMixer.IsValid())
+            return;
+
+        if (!currentBossPlayable.IsValid())
+        {
+            currentBossPlayable = AnimationClipPlayable.Create(bossAnimationGraph, clip);
+            currentBossPlayable.SetApplyFootIK(false);
+            currentBossPlayable.SetSpeed(0d);
+
+            bossAnimationGraph.Connect(currentBossPlayable, 0, bossAnimationMixer, 0);
+            bossAnimationMixer.SetInputWeight(0, 1f);
+            bossAnimationMixer.SetInputWeight(1, 0f);
+
+            currentBossClip = clip;
+            currentBossClipName = stateName;
+            currentBossClipTime = 0f;
+            currentBossClipLoops = ShouldLoopBossClip(stateName);
+            bossAnimationBlending = false;
+            return;
+        }
+
+        if (nextBossPlayable.IsValid())
+        {
+            nextBossPlayable.Destroy();
+        }
+
+        if (bossAnimationMixer.GetInput(1).IsValid())
+        {
+            bossAnimationMixer.DisconnectInput(1);
+        }
+
+        nextBossPlayable = AnimationClipPlayable.Create(bossAnimationGraph, clip);
+        nextBossPlayable.SetApplyFootIK(false);
+        nextBossPlayable.SetSpeed(0d);
+
+        bossAnimationGraph.Connect(nextBossPlayable, 0, bossAnimationMixer, 1);
+        bossAnimationMixer.SetInputWeight(0, 1f);
+        bossAnimationMixer.SetInputWeight(1, 0f);
+
+        nextBossClip = clip;
+        nextBossClipName = stateName;
+        nextBossClipTime = 0f;
+        nextBossClipLoops = ShouldLoopBossClip(stateName);
+        bossBlendTimer = 0f;
+        bossBlendDuration = Mathf.Max(0.01f, blendDuration);
+        bossAnimationBlending = true;
     }
 
     private void RegisterBossAnimationClips(RuntimeAnimatorController controller)
@@ -731,30 +814,83 @@ public class TempBossController : MonoBehaviour
         return null;
     }
 
-    private void UpdateBossAnimationClip()
+    private void UpdateBossAnimationPlayable()
     {
-        if (currentBossClip == null || bossModelInstance == null)
+        if (!bossAnimationGraph.IsValid() || currentBossClip == null || !currentBossPlayable.IsValid())
             return;
 
-        float clipLength = Mathf.Max(0.01f, currentBossClip.length);
-        currentBossClipTime += Time.deltaTime;
+        currentBossClipTime = AdvanceBossClipTime(currentBossClipTime, currentBossClip, currentBossClipLoops);
+        currentBossPlayable.SetTime(currentBossClipTime);
 
-        if (currentBossClipLoops)
+        if (bossAnimationBlending && nextBossClip != null && nextBossPlayable.IsValid())
         {
-            currentBossClipTime %= clipLength;
-        }
-        else if (currentBossClipTime >= clipLength)
-        {
-            currentBossClipTime = clipLength;
+            nextBossClipTime = AdvanceBossClipTime(nextBossClipTime, nextBossClip, nextBossClipLoops);
+            nextBossPlayable.SetTime(nextBossClipTime);
 
-            if (health != null && !health.IsDead && Time.time >= animationLockUntil)
+            bossBlendTimer += Time.deltaTime;
+            float blend = Mathf.Clamp01(bossBlendTimer / bossBlendDuration);
+            bossAnimationMixer.SetInputWeight(0, 1f - blend);
+            bossAnimationMixer.SetInputWeight(1, blend);
+
+            if (blend >= 1f)
             {
-                PlayBossAnimation("Idle1_Toilet");
-                return;
+                CompleteBossAnimationBlend();
             }
         }
 
-        currentBossClip.SampleAnimation(bossModelInstance, currentBossClipTime);
+        bossAnimationGraph.Evaluate(0f);
+
+        if (!currentBossClipLoops && currentBossClipTime >= currentBossClip.length && health != null && !health.IsDead && Time.time >= animationLockUntil)
+        {
+            PlayBossAnimation("Idle1_Toilet");
+        }
+    }
+
+    private float AdvanceBossClipTime(float time, AnimationClip clip, bool loops)
+    {
+        if (clip == null)
+            return 0f;
+
+        float clipLength = Mathf.Max(0.01f, clip.length);
+        time += Time.deltaTime;
+
+        if (loops)
+        {
+            return time % clipLength;
+        }
+
+        return Mathf.Min(time, clipLength);
+    }
+
+    private void CompleteBossAnimationBlend()
+    {
+        if (currentBossPlayable.IsValid())
+        {
+            currentBossPlayable.Destroy();
+        }
+
+        if (bossAnimationMixer.GetInput(0).IsValid())
+        {
+            bossAnimationMixer.DisconnectInput(0);
+        }
+
+        currentBossPlayable = nextBossPlayable;
+        currentBossClip = nextBossClip;
+        currentBossClipName = nextBossClipName;
+        currentBossClipTime = nextBossClipTime;
+        currentBossClipLoops = nextBossClipLoops;
+
+        nextBossPlayable = default;
+        nextBossClip = null;
+        nextBossClipName = null;
+        nextBossClipTime = 0f;
+        nextBossClipLoops = false;
+        bossAnimationBlending = false;
+
+        bossAnimationMixer.DisconnectInput(1);
+        bossAnimationGraph.Connect(currentBossPlayable, 0, bossAnimationMixer, 0);
+        bossAnimationMixer.SetInputWeight(0, 1f);
+        bossAnimationMixer.SetInputWeight(1, 0f);
     }
 
     private bool ShouldLoopBossClip(string stateName)
