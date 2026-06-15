@@ -20,6 +20,11 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float moveSpeed = 3.2f;
     [SerializeField] private float closeAttackDistance = 4f;
     [SerializeField] private float fightStartGraceTime = 3f;
+    [SerializeField] private float bossCollisionRadius = 1.55f;
+    [SerializeField] private float bossCollisionHeight = 4.2f;
+    [SerializeField] private float bossCollisionCenterY = 1.95f;
+    [SerializeField] private float obstacleProbeDistance = 2.1f;
+    [SerializeField] private float sideStepProbeDistance = 2.8f;
 
     [Header("Melee")]
     [SerializeField] private float closeAttackDamage = 18f;
@@ -83,6 +88,8 @@ public class TempBossController : MonoBehaviour
     private readonly HashSet<PlayerHealth> meleeHitPlayers = new HashSet<PlayerHealth>();
     private readonly HashSet<string> missingAnimatorStateLogs = new HashSet<string>();
 
+    private CapsuleCollider bossCollider;
+    private Rigidbody bossRigidbody;
     private bool importedBossVisuals;
     private bool playerInMeleeZone;
     private bool meleeHitboxesActive;
@@ -128,6 +135,7 @@ public class TempBossController : MonoBehaviour
         bodyRenderer.material.EnableKeyword("_EMISSION");
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
         bodyRenderer.enabled = false;
+        ConfigureBossBodyCollision();
 
         bossStartTime = Time.time;
         BuildBossVisuals();
@@ -202,7 +210,174 @@ public class TempBossController : MonoBehaviour
         }
 
         SetState(BossState.Chase);
-        transform.position += direction.normalized * moveSpeed * Time.deltaTime;
+        MoveWithObstacleAvoidance(direction.normalized, moveSpeed * Time.deltaTime);
+    }
+
+    private void MoveWithObstacleAvoidance(Vector3 desiredDirection, float distance)
+    {
+        if (desiredDirection.sqrMagnitude < 0.001f || distance <= 0f)
+            return;
+
+        desiredDirection.y = 0f;
+        desiredDirection.Normalize();
+
+        if (!CapsuleCastBoss(desiredDirection, Mathf.Max(distance, obstacleProbeDistance), out RaycastHit directHit))
+        {
+            transform.position += desiredDirection * distance;
+            return;
+        }
+
+        Vector3 left = Quaternion.Euler(0f, -72f, 0f) * desiredDirection;
+        Vector3 right = Quaternion.Euler(0f, 72f, 0f) * desiredDirection;
+        ChooseSideStepOrder(left, right, out Vector3 firstSideStep, out Vector3 secondSideStep);
+
+        if (TrySideStep(firstSideStep, distance))
+        {
+            return;
+        }
+
+        if (TrySideStep(secondSideStep, distance))
+        {
+            return;
+        }
+
+        Vector3 slide = Vector3.ProjectOnPlane(desiredDirection, directHit.normal);
+        slide.y = 0f;
+
+        if (slide.sqrMagnitude > 0.001f && !CapsuleCastBoss(slide.normalized, Mathf.Max(distance, obstacleProbeDistance * 0.7f), out _))
+        {
+            transform.position += slide.normalized * distance * 0.75f;
+            RotateToward(slide);
+            return;
+        }
+
+        SetState(BossState.Idle);
+    }
+
+    private bool TrySideStep(Vector3 direction, float distance)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return false;
+
+        Vector3 normalized = direction.normalized;
+        if (CapsuleCastBoss(normalized, Mathf.Max(distance, sideStepProbeDistance), out _))
+            return false;
+
+        transform.position += normalized * distance;
+        RotateToward(normalized);
+        return true;
+    }
+
+    private void ChooseSideStepOrder(Vector3 left, Vector3 right, out Vector3 first, out Vector3 second)
+    {
+        if (player == null)
+        {
+            first = left;
+            second = right;
+            return;
+        }
+
+        Vector3 toPlayer = player.position - transform.position;
+        toPlayer.y = 0f;
+
+        if (toPlayer.sqrMagnitude < 0.001f)
+        {
+            first = left;
+            second = right;
+            return;
+        }
+
+        float leftScore = Vector3.Dot(left.normalized, toPlayer.normalized);
+        float rightScore = Vector3.Dot(right.normalized, toPlayer.normalized);
+
+        if (leftScore >= rightScore)
+        {
+            first = left;
+            second = right;
+        }
+        else
+        {
+            first = right;
+            second = left;
+        }
+    }
+
+    private void RotateToward(Vector3 direction)
+    {
+        direction.y = 0f;
+
+        if (direction.sqrMagnitude > 0.001f)
+        {
+            transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+        }
+    }
+
+    private bool CapsuleCastBoss(Vector3 direction, float distance, out RaycastHit hit)
+    {
+        GetBossCapsulePoints(out Vector3 point1, out Vector3 point2, out float radius);
+
+        RaycastHit[] hits = Physics.CapsuleCastAll(
+            point1,
+            point2,
+            radius,
+            direction,
+            distance,
+            ~0,
+            QueryTriggerInteraction.Ignore
+        );
+
+        hit = default;
+        float nearestDistance = float.MaxValue;
+        bool found = false;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit candidate = hits[i];
+
+            if (candidate.collider == null || ShouldIgnoreBossMovementHit(candidate.collider))
+                continue;
+
+            if (candidate.distance < nearestDistance)
+            {
+                nearestDistance = candidate.distance;
+                hit = candidate;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    private bool ShouldIgnoreBossMovementHit(Collider collider)
+    {
+        if (collider == null || collider.isTrigger)
+            return true;
+
+        if (collider == bossCollider || collider.transform.IsChildOf(transform))
+            return true;
+
+        if (collider.GetComponentInParent<PlayerHealth>() != null)
+            return true;
+
+        if (collider.GetComponentInParent<EnemyHealth>() != null)
+            return true;
+
+        if (collider.CompareTag("Ground"))
+            return true;
+
+        string objectName = collider.name;
+        return objectName.Contains("Ground") || objectName.Contains("Floor") || objectName.Contains("Projectile");
+    }
+
+    private void GetBossCapsulePoints(out Vector3 point1, out Vector3 point2, out float radius)
+    {
+        Vector3 center = transform.position + Vector3.up * bossCollisionCenterY;
+        float height = Mathf.Max(bossCollisionHeight, bossCollisionRadius * 2f + 0.1f);
+        radius = Mathf.Max(0.2f, bossCollisionRadius);
+        float halfLine = Mathf.Max(0f, height * 0.5f - radius);
+
+        point1 = center + Vector3.up * halfLine;
+        point2 = center - Vector3.up * halfLine;
     }
 
     private void FacePlayer()
@@ -566,6 +741,30 @@ public class TempBossController : MonoBehaviour
         BuildBossCombatHitboxes();
         FixImportedBossMaterials(bossModelInstance);
         return true;
+    }
+
+    private void ConfigureBossBodyCollision()
+    {
+        bossCollider = GetComponent<CapsuleCollider>();
+        if (bossCollider == null)
+        {
+            bossCollider = gameObject.AddComponent<CapsuleCollider>();
+        }
+
+        bossCollider.isTrigger = false;
+        bossCollider.radius = bossCollisionRadius / Mathf.Max(0.001f, transform.localScale.x);
+        bossCollider.height = bossCollisionHeight / Mathf.Max(0.001f, transform.localScale.y);
+        bossCollider.center = Vector3.up * (bossCollisionCenterY / Mathf.Max(0.001f, transform.localScale.y));
+
+        bossRigidbody = GetComponent<Rigidbody>();
+        if (bossRigidbody == null)
+        {
+            bossRigidbody = gameObject.AddComponent<Rigidbody>();
+        }
+
+        bossRigidbody.useGravity = false;
+        bossRigidbody.isKinematic = true;
+        bossRigidbody.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
     private void BuildBossCombatHitboxes()

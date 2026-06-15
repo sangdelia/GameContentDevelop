@@ -18,9 +18,7 @@ public static class BossArenaBuilder
         CreateCube(root.transform, "EastWall", new Vector3(half, 2f, 0f), new Vector3(1f, 4f, size), new Color(0.18f, 0.24f, 0.3f));
         CreateCube(root.transform, "WestWall", new Vector3(-half, 2f, 0f), new Vector3(1f, 4f, size), new Color(0.18f, 0.24f, 0.3f));
 
-        CreateCube(root.transform, "LeftCover", new Vector3(-9f, 1f, 5f), new Vector3(3f, 2f, 7f), new Color(0.12f, 0.18f, 0.23f));
-        CreateCube(root.transform, "RightCover", new Vector3(9f, 1f, 5f), new Vector3(3f, 2f, 7f), new Color(0.12f, 0.18f, 0.23f));
-        CreateCube(root.transform, "BackCover", new Vector3(0f, 1f, -9f), new Vector3(8f, 2f, 2.5f), new Color(0.12f, 0.18f, 0.23f));
+        BuildLaserCoverWalls(root.transform);
         BuildBossArenaDressing(root.transform, size);
 
         GameObject lightObject = new GameObject("ArenaLight");
@@ -53,7 +51,6 @@ public static class BossArenaBuilder
         CreateModel(root, "gate-door", "BossDoorSouthBulkhead", new Vector3(0f, 0.1f, -half + 0.62f), Quaternion.identity, Vector3.one * 3.1f);
         CreateModel(root, "cables", "LeftCableRun", new Vector3(-half + 4f, 0.05f, -2f), Quaternion.Euler(0f, 90f, 0f), Vector3.one * 2.4f);
         CreateModel(root, "cables", "RightCableRun", new Vector3(half - 4f, 0.05f, 2f), Quaternion.Euler(0f, -90f, 0f), Vector3.one * 2.4f);
-        CreateModel(root, "template-floor-layer-raised", "CentralReactorFloor", Vector3.zero, Quaternion.identity, Vector3.one * 4.2f);
         CreateModel(root, "template-floor-detail-a", "NorthFloorCircuit", new Vector3(0f, 0.06f, 8f), Quaternion.identity, Vector3.one * 3.6f);
         CreateModel(root, "template-floor-detail", "SouthFloorCircuit", new Vector3(0f, 0.06f, -8f), Quaternion.Euler(0f, 180f, 0f), Vector3.one * 3.6f);
 
@@ -61,6 +58,47 @@ public static class BossArenaBuilder
         CreateNeonStrip(root, "SouthNeon", new Vector3(0f, 0.08f, -half + 1.3f), new Vector3(size - 5f, 0.06f, 0.2f));
         CreateNeonStrip(root, "EastNeon", new Vector3(half - 1.3f, 0.08f, 0f), new Vector3(0.2f, 0.06f, size - 5f));
         CreateNeonStrip(root, "WestNeon", new Vector3(-half + 1.3f, 0.08f, 0f), new Vector3(0.2f, 0.06f, size - 5f));
+    }
+
+    private static void BuildLaserCoverWalls(Transform root)
+    {
+        Color coverColor = new Color(0.11f, 0.16f, 0.21f);
+        Color accentColor = new Color(0.04f, 0.75f, 1f);
+
+        CreateCoverWall(root, "LaserCover_LeftForward", new Vector3(-8.5f, 2.05f, 7.5f), new Vector3(2.2f, 4.1f, 8.2f), coverColor, accentColor);
+        CreateCoverWall(root, "LaserCover_RightForward", new Vector3(8.5f, 2.05f, 7.5f), new Vector3(2.2f, 4.1f, 8.2f), coverColor, accentColor);
+        CreateCoverWall(root, "LaserCover_LeftBack", new Vector3(-8.5f, 2.05f, -8.5f), new Vector3(2.2f, 4.1f, 7.4f), coverColor, accentColor);
+        CreateCoverWall(root, "LaserCover_RightBack", new Vector3(8.5f, 2.05f, -8.5f), new Vector3(2.2f, 4.1f, 7.4f), coverColor, accentColor);
+        CreateCoverWall(root, "LaserCover_RearGate", new Vector3(0f, 2.05f, -12.8f), new Vector3(9f, 4.1f, 1.8f), coverColor, accentColor);
+    }
+
+    private static void CreateCoverWall(Transform root, string name, Vector3 localPosition, Vector3 scale, Color color, Color accentColor)
+    {
+        GameObject wall = CreateCube(root, name, localPosition, scale, color);
+        wall.tag = "Untagged";
+
+        Collider collider = wall.GetComponent<Collider>();
+        if (collider != null)
+        {
+            collider.isTrigger = false;
+        }
+
+        Vector3 accentScale = new Vector3(
+            Mathf.Max(0.12f, scale.x + 0.05f),
+            0.08f,
+            Mathf.Max(0.12f, scale.z + 0.05f)
+        );
+
+        GameObject topAccent = CreateCube(root, name + "_NeonTop", localPosition + Vector3.up * (scale.y * 0.5f + 0.08f), accentScale, accentColor);
+        Collider accentCollider = topAccent.GetComponent<Collider>();
+        if (accentCollider != null)
+        {
+            Object.Destroy(accentCollider);
+        }
+
+        Renderer accentRenderer = topAccent.GetComponent<Renderer>();
+        accentRenderer.material.EnableKeyword("_EMISSION");
+        accentRenderer.material.SetColor("_EmissionColor", accentColor * 2.1f);
     }
 
     private static void BuildBossArenaDressing(Transform root, float size)
