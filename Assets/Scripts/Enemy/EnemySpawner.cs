@@ -189,8 +189,8 @@ public class EnemySpawner : MonoBehaviour
             flyingAttack.Init(player);
             ConfigureHealth(enemy, flyingHp);
             enemy.name = "Enemy_Flying_Drone";
-            enemy.transform.position += Vector3.up * 3.55f;
-            enemy.transform.localScale = Vector3.one * 1.08f;
+            enemy.transform.position += Vector3.up * 3.85f;
+            enemy.transform.localScale = Vector3.one * 1.32f;
             ApplyEnemyColor(enemy, new Color(1f, 0.25f, 0.95f));
             EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Flying);
             return;
@@ -210,7 +210,7 @@ public class EnemySpawner : MonoBehaviour
             ConfigureHealth(enemy, rangedHp);
             enemy.name = "Enemy_Ranged_Gunner";
             ApplyEnemyColor(enemy, new Color(0.1f, 0.85f, 1f));
-            enemy.transform.localScale = Vector3.one * 1.18f;
+            enemy.transform.localScale = Vector3.one * 1.42f;
             EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Ranged);
             return;
         }
@@ -219,13 +219,13 @@ public class EnemySpawner : MonoBehaviour
 
         if (mover != null)
         {
-            mover.Configure(meleeMoveSpeed, meleeDamage, meleeAttackInterval, 1.25f);
+            mover.Configure(meleeMoveSpeed, meleeDamage, meleeAttackInterval, 1.55f);
             mover.Init(player);
         }
 
         ConfigureHealth(enemy, meleeHp);
         enemy.name = "Enemy_Melee_Chaser";
-        enemy.transform.localScale = Vector3.one * 1.16f;
+        enemy.transform.localScale = Vector3.one * 1.45f;
         EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Melee);
     }
 

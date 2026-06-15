@@ -516,7 +516,7 @@ public class EnemyVisual : MonoBehaviour
             resourcePath = "Models/Enemies/Enemy_Trilobite";
             modelName = "EnemyModel_Trilobite";
             localPosition = new Vector3(0f, -0.2f, 0f);
-            localScale = Vector3.one * 1.2f;
+            localScale = Vector3.one * 1.45f;
             baseColor = new Color(0.9f, 0.12f, 0.18f);
         }
         else if (type == EnemyVisualType.Ranged)
@@ -524,7 +524,7 @@ public class EnemyVisual : MonoBehaviour
             resourcePath = "Models/Enemies/Enemy_QuadShell";
             modelName = "EnemyModel_QuadShell";
             localPosition = new Vector3(0f, -0.15f, 0f);
-            localScale = Vector3.one * 1.05f;
+            localScale = Vector3.one * 1.28f;
             baseColor = new Color(0.08f, 0.8f, 1f);
         }
         else
@@ -532,7 +532,7 @@ public class EnemyVisual : MonoBehaviour
             resourcePath = "Models/Enemies/Enemy_EyeDrone";
             modelName = "EnemyModel_EyeDrone";
             localPosition = Vector3.zero;
-            localScale = Vector3.one * 1.08f;
+            localScale = Vector3.one * 1.3f;
             baseColor = new Color(1f, 0.22f, 0.95f);
         }
 
@@ -853,7 +853,7 @@ public class EnemyVisual : MonoBehaviour
             float visualRadius = Mathf.Max(bounds.extents.x, bounds.extents.z);
 
             capsule.height = Mathf.Max(visualHeight, visualRadius * 2f + 0.1f);
-            capsule.radius = Mathf.Clamp(visualRadius * 0.78f, 0.45f, 1.85f);
+            capsule.radius = Mathf.Clamp(visualRadius * 0.78f, 0.5f, 2.3f);
             capsule.center = new Vector3(bounds.center.x, originalBottom + capsule.height * 0.5f, bounds.center.z);
             return;
         }
