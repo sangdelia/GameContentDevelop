@@ -11,10 +11,12 @@ public class EnemyMoveToPlayer : MonoBehaviour
     [Header("Attack")]
     [SerializeField] private float attackDamage = 10f;
     [SerializeField] private float attackInterval = 1f;
+    [SerializeField] private float contactAttackPadding = 0.18f;
 
     private Transform player;
     private PlayerHealth playerHealth;
     private EnemyVisual visual;
+    private StatusEffectController statusEffects;
     private float attackTimer;
 
     public void Configure(float speed, float damage, float interval, float stoppingDistance)
@@ -23,7 +25,7 @@ public class EnemyMoveToPlayer : MonoBehaviour
         attackDamage = damage;
         attackInterval = interval;
         stopDistance = stoppingDistance;
-        bodySeparationDistance = Mathf.Max(bodySeparationDistance, stopDistance + 0.25f);
+        bodySeparationDistance = Mathf.Min(bodySeparationDistance, stopDistance + 0.15f);
     }
 
     public void Init(Transform target)
@@ -41,6 +43,7 @@ public class EnemyMoveToPlayer : MonoBehaviour
         }
 
         visual = GetComponent<EnemyVisual>();
+        statusEffects = GetComponent<StatusEffectController>();
     }
 
     private void Update()
@@ -52,6 +55,17 @@ public class EnemyMoveToPlayer : MonoBehaviour
         direction.y = 0f;
 
         float distance = direction.magnitude;
+        float attackDistance = stopDistance + contactAttackPadding;
+
+        if (distance <= attackDistance)
+        {
+            if (direction.sqrMagnitude > 0.001f)
+            {
+                Face(direction);
+            }
+
+            TryAttack();
+        }
 
         if (distance < bodySeparationDistance)
         {
@@ -59,19 +73,25 @@ public class EnemyMoveToPlayer : MonoBehaviour
         }
 
         if (distance <= stopDistance)
-        {
-            TryAttack();
             return;
-        }
 
-        float moveDistance = Mathf.Min(moveSpeed * Time.deltaTime, Mathf.Max(0f, distance - stopDistance));
-        Vector3 move = direction.normalized * moveDistance;
-        transform.position += move;
+        float speedMultiplier = GetCurrentMoveSpeedMultiplier();
+        float moveDistance = Mathf.Min(moveSpeed * speedMultiplier * Time.deltaTime, Mathf.Max(0f, distance - stopDistance));
+        transform.position += direction.normalized * moveDistance;
 
         if (direction != Vector3.zero)
         {
-            transform.rotation = Quaternion.LookRotation(direction);
+            Face(direction);
         }
+    }
+
+    private void Face(Vector3 direction)
+    {
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.001f)
+            return;
+
+        transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
     }
 
     private void TryAttack()
@@ -91,6 +111,16 @@ public class EnemyMoveToPlayer : MonoBehaviour
         }
 
         playerHealth.TakeDamage(attackDamage);
+    }
+
+    private float GetCurrentMoveSpeedMultiplier()
+    {
+        if (statusEffects == null)
+        {
+            statusEffects = GetComponent<StatusEffectController>();
+        }
+
+        return statusEffects != null ? statusEffects.MoveSpeedMultiplier : 1f;
     }
 
     private void PushOutFromPlayer(Vector3 directionToPlayer, float distance)

@@ -42,3 +42,9 @@ Assets/**/*.zip
 Assets/**/*.zip.meta
 Assets/Art/Downloaded/KenneySpaceStationKit/
 Assets/Art/Downloaded/KenneySpaceStationKit.meta
+
+# Large imported boss source assets kept locally unless Git LFS is configured for the repo.
+Assets/Sci-Fi ToiletMech/
+Assets/Sci-Fi ToiletMech.meta
+Assets/Resources/Models/Boss/ToiletMech_Boss.prefab
+Assets/Resources/Models/Boss/ToiletMech_Boss.prefab.meta

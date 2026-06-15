@@ -13,6 +13,7 @@ public class EnemyRangedAttack : MonoBehaviour
 
     private Transform player;
     private EnemyVisual visual;
+    private StatusEffectController statusEffects;
     private float attackTimer;
     private bool chargeStarted;
 
@@ -30,6 +31,7 @@ public class EnemyRangedAttack : MonoBehaviour
         player = target;
         attackTimer = Random.Range(0.4f, attackInterval);
         visual = GetComponent<EnemyVisual>();
+        statusEffects = GetComponent<StatusEffectController>();
     }
 
     private void Update()
@@ -60,12 +62,23 @@ public class EnemyRangedAttack : MonoBehaviour
     {
         if (distance > preferredDistance)
         {
-            transform.position += direction * moveSpeed * Time.deltaTime;
+            transform.position += direction * GetCurrentMoveSpeed() * Time.deltaTime;
         }
         else if (distance < retreatDistance)
         {
-            transform.position -= direction * moveSpeed * Time.deltaTime;
+            transform.position -= direction * GetCurrentMoveSpeed() * Time.deltaTime;
         }
+    }
+
+    private float GetCurrentMoveSpeed()
+    {
+        if (statusEffects == null)
+        {
+            statusEffects = GetComponent<StatusEffectController>();
+        }
+
+        float speedMultiplier = statusEffects != null ? statusEffects.MoveSpeedMultiplier : 1f;
+        return moveSpeed * speedMultiplier;
     }
 
     private void TryShoot(Vector3 direction)

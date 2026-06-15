@@ -22,14 +22,17 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private float fightStartGraceTime = 3f;
     [SerializeField] private float bossCollisionRadius = 1.55f;
     [SerializeField] private float bossCollisionHeight = 4.2f;
-    [SerializeField] private float bossCollisionCenterY = 1.95f;
+    [SerializeField] private float bossCollisionCenterY = 0f;
     [SerializeField] private float obstacleProbeDistance = 2.1f;
     [SerializeField] private float sideStepProbeDistance = 2.8f;
+    [SerializeField] private float moveDirectionSmoothSpeed = 8f;
+    [SerializeField] private float turnSmoothSpeed = 10f;
 
     [Header("Melee")]
     [SerializeField] private float closeAttackDamage = 18f;
     [SerializeField] private float meleeAttackCooldown = 1.35f;
     [SerializeField] private float meleeAttackDuration = 1.05f;
+    [SerializeField] private float meleeRecoveryDuration = 0.55f;
     [SerializeField] private float meleeImpactDelay = 0.46f;
     [SerializeField] private float meleeHitboxActiveTime = 0.28f;
     [SerializeField] private Vector3 meleeDetectionOffset = new Vector3(0f, 0.8f, 0.55f);
@@ -59,6 +62,9 @@ public class TempBossController : MonoBehaviour
     [SerializeField] private Vector3 toiletMechLocalPosition = new Vector3(0f, -1.05f, 0f);
     [SerializeField] private Vector3 toiletMechLocalRotation = Vector3.zero;
     [SerializeField] private Vector3 toiletMechLocalScale = Vector3.one * 1.28f;
+    [SerializeField] private float visualGroundClearance = 0.03f;
+    [SerializeField] private float groundProbeHeight = 8f;
+    [SerializeField] private float groundProbeDistance = 20f;
 
     private Transform player;
     private PlayerHealth playerHealth;
@@ -69,6 +75,7 @@ public class TempBossController : MonoBehaviour
     private float nextHitReactionTime;
     private int rangedPatternIndex;
     private float bossStartTime;
+    private Vector3 smoothedMoveDirection;
 
     private Renderer bodyRenderer;
     private LineRenderer warningLine;
@@ -97,6 +104,10 @@ public class TempBossController : MonoBehaviour
     private Vector3 importedBossModelAnchorPosition;
     private Quaternion importedBossModelAnchorRotation;
     private Vector3 importedBossModelAnchorScale;
+    private Transform bossAnimatorTransform;
+    private Vector3 bossAnimatorAnchorPosition;
+    private Quaternion bossAnimatorAnchorRotation;
+    private Vector3 bossAnimatorAnchorScale;
     private Color normalColor = new Color(0.55f, 0.08f, 0.9f);
     private Color warningColor = new Color(1f, 0.05f, 0.05f);
 
@@ -106,7 +117,7 @@ public class TempBossController : MonoBehaviour
     {
         GameObject bossObject = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         bossObject.name = "Temp_Boss_Stargrave_Core";
-        bossObject.transform.position = position + Vector3.up * 3f;
+        bossObject.transform.position = position;
         bossObject.transform.localScale = new Vector3(3f, 3f, 3f);
 
         EnemyHealth bossHealth = bossObject.AddComponent<EnemyHealth>();
@@ -138,6 +149,7 @@ public class TempBossController : MonoBehaviour
         bodyRenderer.material.EnableKeyword("_EMISSION");
         bodyRenderer.material.SetColor("_EmissionColor", normalColor * 0.8f);
         bodyRenderer.enabled = false;
+        SnapBossRootToGround();
         ConfigureBossBodyCollision();
 
         bossStartTime = Time.time;
@@ -173,11 +185,38 @@ public class TempBossController : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (state != BossState.Dead)
+        {
+            SnapBossRootToGround();
+        }
+
         KeepImportedBossModelAnchored();
     }
 
     private void UpdateIdleOrChase()
     {
+        FacePlayer();
+
+        if (Time.time - bossStartTime < fightStartGraceTime)
+        {
+            if (playerInMeleeZone && Time.time >= nextMeleeAttackTime)
+            {
+                StartCoroutine(MeleeAttackRoutine());
+                return;
+            }
+
+            MoveTowardPlayer();
+            return;
+        }
+
+        patternTimer += Time.deltaTime;
+        if (patternTimer >= patternInterval)
+        {
+            patternTimer = 0f;
+            StartNextRangedPattern();
+            return;
+        }
+
         if (playerInMeleeZone)
         {
             if (Time.time >= nextMeleeAttackTime)
@@ -192,18 +231,7 @@ public class TempBossController : MonoBehaviour
             return;
         }
 
-        FacePlayer();
         MoveTowardPlayer();
-
-        if (Time.time - bossStartTime < fightStartGraceTime)
-            return;
-
-        patternTimer += Time.deltaTime;
-        if (patternTimer >= patternInterval)
-        {
-            patternTimer = 0f;
-            StartNextRangedPattern();
-        }
     }
 
     private void MoveTowardPlayer()
@@ -228,10 +256,12 @@ public class TempBossController : MonoBehaviour
 
         desiredDirection.y = 0f;
         desiredDirection.Normalize();
+        desiredDirection = SmoothBossMoveDirection(desiredDirection);
 
         if (!CapsuleCastBoss(desiredDirection, Mathf.Max(distance, obstacleProbeDistance), out RaycastHit directHit))
         {
-            transform.position += desiredDirection * distance;
+            MoveBossRoot(desiredDirection * distance);
+            RotateToward(desiredDirection);
             return;
         }
 
@@ -254,12 +284,37 @@ public class TempBossController : MonoBehaviour
 
         if (slide.sqrMagnitude > 0.001f && !CapsuleCastBoss(slide.normalized, Mathf.Max(distance, obstacleProbeDistance * 0.7f), out _))
         {
-            transform.position += slide.normalized * distance * 0.75f;
+            MoveBossRoot(slide.normalized * distance * 0.75f);
             RotateToward(slide);
             return;
         }
 
         SetState(BossState.Idle);
+    }
+
+    private Vector3 SmoothBossMoveDirection(Vector3 desiredDirection)
+    {
+        if (smoothedMoveDirection.sqrMagnitude < 0.001f)
+        {
+            smoothedMoveDirection = desiredDirection;
+            return desiredDirection;
+        }
+
+        float blend = 1f - Mathf.Exp(-moveDirectionSmoothSpeed * Time.deltaTime);
+        smoothedMoveDirection = Vector3.Slerp(smoothedMoveDirection, desiredDirection, blend);
+        smoothedMoveDirection.y = 0f;
+
+        if (smoothedMoveDirection.sqrMagnitude < 0.001f)
+            return desiredDirection;
+
+        return smoothedMoveDirection.normalized;
+    }
+
+    private void MoveBossRoot(Vector3 movement)
+    {
+        Vector3 nextPosition = transform.position + movement;
+        nextPosition.y = GetGroundY(nextPosition);
+        transform.position = nextPosition;
     }
 
     private bool TrySideStep(Vector3 direction, float distance)
@@ -271,7 +326,7 @@ public class TempBossController : MonoBehaviour
         if (CapsuleCastBoss(normalized, Mathf.Max(distance, sideStepProbeDistance), out _))
             return false;
 
-        transform.position += normalized * distance;
+        MoveBossRoot(normalized * distance);
         RotateToward(normalized);
         return true;
     }
@@ -316,7 +371,9 @@ public class TempBossController : MonoBehaviour
 
         if (direction.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            Quaternion targetRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            float blend = 1f - Mathf.Exp(-turnSmoothSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
         }
     }
 
@@ -379,7 +436,18 @@ public class TempBossController : MonoBehaviour
 
     private void GetBossCapsulePoints(out Vector3 point1, out Vector3 point2, out float radius)
     {
-        Vector3 center = transform.position + Vector3.up * bossCollisionCenterY;
+        if (bossCollider != null)
+        {
+            Vector3 colliderCenter = transform.TransformPoint(bossCollider.center);
+            float colliderHeight = Mathf.Max(bossCollider.height * transform.lossyScale.y, 0.01f);
+            radius = bossCollider.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.z);
+            float colliderHalfLine = Mathf.Max(0f, colliderHeight * 0.5f - radius);
+            point1 = colliderCenter + Vector3.up * colliderHalfLine;
+            point2 = colliderCenter - Vector3.up * colliderHalfLine;
+            return;
+        }
+
+        Vector3 center = transform.position + Vector3.up * (bossCollisionHeight * 0.5f - 3f);
         float height = Mathf.Max(bossCollisionHeight, bossCollisionRadius * 2f + 0.1f);
         radius = Mathf.Max(0.2f, bossCollisionRadius);
         float halfLine = Mathf.Max(0f, height * 0.5f - radius);
@@ -398,7 +466,9 @@ public class TempBossController : MonoBehaviour
 
         if (direction.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.LookRotation(direction);
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            float blend = 1f - Mathf.Exp(-turnSmoothSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
         }
     }
 
@@ -412,7 +482,9 @@ public class TempBossController : MonoBehaviour
 
         if (direction.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.LookRotation(direction);
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            float blend = 1f - Mathf.Exp(-turnSmoothSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
         }
     }
 
@@ -420,12 +492,6 @@ public class TempBossController : MonoBehaviour
     {
         if (state != BossState.Idle && state != BossState.Chase)
             return;
-
-        if (playerInMeleeZone && Time.time >= nextMeleeAttackTime)
-        {
-            StartCoroutine(MeleeAttackRoutine());
-            return;
-        }
 
         rangedPatternIndex = (rangedPatternIndex + 1) % 2;
         if (rangedPatternIndex == 0)
@@ -444,7 +510,7 @@ public class TempBossController : MonoBehaviour
             yield break;
 
         SetState(BossState.MeleeAttack);
-        nextMeleeAttackTime = Time.time + meleeAttackCooldown;
+        nextMeleeAttackTime = Time.time + Mathf.Max(meleeAttackCooldown, meleeAttackDuration + meleeRecoveryDuration);
         PlayBossAnimation("Attack4", meleeAttackDuration);
 
         yield return new WaitForSeconds(meleeImpactDelay);
@@ -453,22 +519,35 @@ public class TempBossController : MonoBehaviour
             yield break;
 
         EnableMeleeHitboxes(true);
-        float activeTimer = 0f;
-        while (activeTimer < meleeHitboxActiveTime)
+        ApplyMeleeBodyContactDamage();
+
+        float activeTime = Mathf.Min(meleeHitboxActiveTime, 0.12f);
+        if (activeTime > 0f)
         {
-            ApplyMeleeBodyContactDamage();
-            activeTimer += Time.deltaTime;
-            yield return null;
+            yield return new WaitForSeconds(activeTime);
         }
+
         EnableMeleeHitboxes(false);
 
-        float remainingTime = Mathf.Max(0f, meleeAttackDuration - meleeImpactDelay - meleeHitboxActiveTime);
+        float remainingTime = Mathf.Max(0f, meleeAttackDuration - meleeImpactDelay - activeTime);
         if (remainingTime > 0f)
         {
             yield return new WaitForSeconds(remainingTime);
         }
 
         CleanupAttackState();
+
+        if (state != BossState.Dead)
+        {
+            SetState(BossState.Idle);
+            PlayBossAnimation("Idle1_Toilet", meleeRecoveryDuration, true);
+
+            if (meleeRecoveryDuration > 0f)
+            {
+                yield return new WaitForSeconds(meleeRecoveryDuration);
+            }
+        }
+
         ReturnToMovementState();
     }
 
@@ -723,9 +802,6 @@ public class TempBossController : MonoBehaviour
         bossModelInstance.transform.localPosition = toiletMechLocalPosition;
         bossModelInstance.transform.localRotation = Quaternion.Euler(toiletMechLocalRotation);
         bossModelInstance.transform.localScale = toiletMechLocalScale;
-        importedBossModelAnchorPosition = bossModelInstance.transform.localPosition;
-        importedBossModelAnchorRotation = bossModelInstance.transform.localRotation;
-        importedBossModelAnchorScale = bossModelInstance.transform.localScale;
         bossAnimator = bossModelInstance.GetComponentInChildren<Animator>();
 
         if (bossAnimator == null)
@@ -748,6 +824,7 @@ public class TempBossController : MonoBehaviour
         bossAnimator.applyRootMotion = false;
         bossAnimator.enabled = true;
         bossAnimator.speed = 1f;
+        bossAnimatorTransform = bossAnimator.transform;
 
         Collider[] colliders = bossModelInstance.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; i++)
@@ -757,7 +834,63 @@ public class TempBossController : MonoBehaviour
 
         BuildBossCombatHitboxes();
         FixImportedBossMaterials(bossModelInstance);
+        AlignImportedBossVisualToGround();
+        importedBossModelAnchorPosition = bossModelInstance.transform.localPosition;
+        importedBossModelAnchorRotation = bossModelInstance.transform.localRotation;
+        importedBossModelAnchorScale = bossModelInstance.transform.localScale;
+        bossAnimatorAnchorPosition = bossAnimatorTransform.localPosition;
+        bossAnimatorAnchorRotation = bossAnimatorTransform.localRotation;
+        bossAnimatorAnchorScale = bossAnimatorTransform.localScale;
         return true;
+    }
+
+    private void AlignImportedBossVisualToGround()
+    {
+        if (bossModelInstance == null)
+            return;
+
+        if (!TryGetRendererWorldBounds(bossModelInstance, out Bounds bounds))
+            return;
+
+        float targetBottomY = GetGroundY(transform.position) + visualGroundClearance;
+        float yOffset = targetBottomY - bounds.min.y;
+
+        if (Mathf.Abs(yOffset) <= 0.001f)
+            return;
+
+        Vector3 worldPosition = bossModelInstance.transform.position + Vector3.up * yOffset;
+        bossModelInstance.transform.position = worldPosition;
+    }
+
+    private void SnapBossRootToGround()
+    {
+        float groundY = GetGroundY(transform.position);
+        transform.position = new Vector3(transform.position.x, groundY, transform.position.z);
+    }
+
+    private bool TryGetRendererWorldBounds(GameObject root, out Bounds bounds)
+    {
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        bounds = default;
+        bool hasBounds = false;
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] == null || !renderers[i].enabled)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderers[i].bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+        }
+
+        return hasBounds;
     }
 
     private void ConfigureBossBodyCollision()
@@ -771,7 +904,15 @@ public class TempBossController : MonoBehaviour
         bossCollider.isTrigger = false;
         bossCollider.radius = bossCollisionRadius / Mathf.Max(0.001f, transform.localScale.x);
         bossCollider.height = bossCollisionHeight / Mathf.Max(0.001f, transform.localScale.y);
-        bossCollider.center = Vector3.up * (bossCollisionCenterY / Mathf.Max(0.001f, transform.localScale.y));
+        float worldCenterY = bossCollisionCenterY;
+        if (Mathf.Approximately(worldCenterY, 0f))
+        {
+            float groundY = GetGroundY(transform.position);
+            float localGroundY = transform.InverseTransformPoint(new Vector3(transform.position.x, groundY, transform.position.z)).y;
+            worldCenterY = localGroundY * transform.lossyScale.y + bossCollisionHeight * 0.5f;
+        }
+
+        bossCollider.center = Vector3.up * (worldCenterY / Mathf.Max(0.001f, transform.localScale.y));
 
         bossRigidbody = GetComponent<Rigidbody>();
         if (bossRigidbody == null)
@@ -784,6 +925,37 @@ public class TempBossController : MonoBehaviour
         bossRigidbody.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
+    private float GetGroundY(Vector3 referencePosition)
+    {
+        Vector3 rayOrigin = referencePosition + Vector3.up * groundProbeHeight;
+        RaycastHit[] hits = Physics.RaycastAll(rayOrigin, Vector3.down, groundProbeDistance, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit hit = hits[i];
+            if (hit.collider == null)
+                continue;
+
+            if (hit.collider.GetComponentInParent<TempBossController>() != null)
+                continue;
+
+            if (hit.collider.GetComponentInParent<PlayerHealth>() != null)
+                continue;
+
+            if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
+                continue;
+
+            string objectName = hit.collider.name;
+            if (hit.collider.CompareTag("Ground") || objectName.Contains("ArenaFloor") || objectName.Contains("Ground") || objectName.Contains("Floor"))
+            {
+                return hit.point.y;
+            }
+        }
+
+        return referencePosition.y;
+    }
+
     private void KeepImportedBossModelAnchored()
     {
         if (!importedBossVisuals || bossModelInstance == null || state == BossState.Dead)
@@ -793,6 +965,13 @@ public class TempBossController : MonoBehaviour
         modelTransform.localPosition = importedBossModelAnchorPosition;
         modelTransform.localRotation = importedBossModelAnchorRotation;
         modelTransform.localScale = importedBossModelAnchorScale;
+
+        if (bossAnimatorTransform != null && bossAnimatorTransform != modelTransform)
+        {
+            bossAnimatorTransform.localPosition = bossAnimatorAnchorPosition;
+            bossAnimatorTransform.localRotation = bossAnimatorAnchorRotation;
+            bossAnimatorTransform.localScale = bossAnimatorAnchorScale;
+        }
     }
 
     private void BuildBossCombatHitboxes()
@@ -816,8 +995,32 @@ public class TempBossController : MonoBehaviour
         List<BossMeleeHitbox> hitboxes = new List<BossMeleeHitbox>();
         AddBoneHitbox(hitboxes, "LeftLeg", new[] { "leftleg", "left_leg", "leg_l", "l_leg", "leftfoot", "foot_l", "l_foot", "lefttoe", "toe_l", "l_toe", "thigh_l", "calf_l", "shin_l" }, new Vector3(0.48f, 0.58f, 0.82f));
         AddBoneHitbox(hitboxes, "RightLeg", new[] { "rightleg", "right_leg", "leg_r", "r_leg", "rightfoot", "foot_r", "r_foot", "righttoe", "toe_r", "r_toe", "thigh_r", "calf_r", "shin_r" }, new Vector3(0.48f, 0.58f, 0.82f));
+        AddFixedMeleeHitbox(hitboxes, "ForwardSweep", meleeDetectionOffset + new Vector3(0f, 0.05f, 0.35f), meleeDetectionSize);
+        AddFixedMeleeHitbox(hitboxes, "BodyContact", new Vector3(0f, 1.15f, 0.2f), new Vector3(2.4f, 2.8f, 2.2f));
         meleeHitboxes = hitboxes.ToArray();
         EnableMeleeHitboxes(false);
+    }
+
+    private void AddFixedMeleeHitbox(List<BossMeleeHitbox> hitboxes, string label, Vector3 localPosition, Vector3 size)
+    {
+        GameObject hitboxObject = new GameObject("Boss" + label + "Hitbox");
+        hitboxObject.transform.SetParent(transform, false);
+        hitboxObject.transform.localPosition = localPosition;
+        hitboxObject.transform.localRotation = Quaternion.identity;
+        hitboxObject.transform.localScale = Vector3.one;
+
+        BoxCollider collider = hitboxObject.AddComponent<BoxCollider>();
+        collider.isTrigger = true;
+        collider.size = size;
+        collider.enabled = false;
+
+        Rigidbody body = hitboxObject.AddComponent<Rigidbody>();
+        body.useGravity = false;
+        body.isKinematic = true;
+
+        BossMeleeHitbox hitbox = hitboxObject.AddComponent<BossMeleeHitbox>();
+        hitbox.Init(this, collider);
+        hitboxes.Add(hitbox);
     }
 
     private void AddBoneHitbox(List<BossMeleeHitbox> hitboxes, string label, string[] nameHints, Vector3 size)
@@ -1121,6 +1324,25 @@ public class TempBossController : MonoBehaviour
                 TryApplyMeleeHit(hitPlayer);
             }
         }
+
+        Vector3 meleeCenter = transform.TransformPoint(meleeDetectionOffset + new Vector3(0f, 0.05f, 0.35f));
+        Vector3 meleeHalfExtents = Vector3.Scale(meleeDetectionSize, transform.lossyScale) * 0.5f;
+        Collider[] boxHits = Physics.OverlapBox(
+            meleeCenter,
+            meleeHalfExtents,
+            transform.rotation,
+            ~0,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < boxHits.Length; i++)
+        {
+            PlayerHealth hitPlayer = boxHits[i].GetComponentInParent<PlayerHealth>();
+            if (hitPlayer != null)
+            {
+                TryApplyMeleeHit(hitPlayer);
+            }
+        }
     }
 
     private void EnableMeleeHitboxes(bool enabled)
@@ -1300,7 +1522,7 @@ public class TempBossController : MonoBehaviour
         if (currentState.IsName(stateName) && currentBossAnimationName == stateName && lockDuration <= 0f)
             return;
 
-        float transitionDuration = lockDuration > 0f ? 0.08f : 0.12f;
+        float transitionDuration = lockDuration > 0f ? 0.14f : 0.22f;
         bossAnimator.CrossFadeInFixedTime(stateName, transitionDuration, 0);
         currentBossAnimationName = stateName;
     }

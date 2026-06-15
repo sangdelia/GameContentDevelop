@@ -61,12 +61,19 @@ public class EnemyHealth : MonoBehaviour
 
     public void TakeDamage(float damage, Vector3 hitPoint, Vector3 hitDirection)
     {
+        DamageInfo info = new DamageInfo(damage, null, DamageType.Direct, hitPoint, hitDirection);
+        TakeDamage(info);
+    }
+
+    public void TakeDamage(DamageInfo info)
+    {
         if (isDead)
             return;
 
+        float damage = Mathf.Max(0f, info.Damage);
         currentHp -= damage;
         currentHp = Mathf.Max(0f, currentHp);
-        Damaged?.Invoke(damage, hitPoint, hitDirection);
+        Damaged?.Invoke(damage, info.HitPoint, info.HitDirection);
         HealthChanged?.Invoke(currentHp, maxHp);
         GameAudio.PlayHit(transform.position);
 

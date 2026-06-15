@@ -3,58 +3,17 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class StargraveRuntimeUI : MonoBehaviour
 {
-    private enum TraitKind
-    {
-        Damage,
-        FireRate,
-        MoveSpeed,
-        Magnet,
-        MaxHealth,
-        Armor,
-        Repair,
-        LifeSteal,
-        Shield
-    }
-
-    private class TraitOption
-    {
-        public readonly TraitKind Kind;
-        public readonly string Title;
-        public readonly string Description;
-        public readonly int MaxRank;
-
-        public TraitOption(TraitKind kind, string title, string description, int maxRank)
-        {
-            Kind = kind;
-            Title = title;
-            Description = description;
-            MaxRank = maxRank;
-        }
-    }
-
     [Header("PC Test Layout")]
     [SerializeField] private bool useStartScreen = true;
     [SerializeField] private bool autoStartOnBuildPlatform = true;
     [SerializeField] private Vector2 canvasSize = new Vector2(1200f, 700f);
     [SerializeField] private Vector3 vrCanvasLocalPosition = new Vector3(0f, -0.08f, 1.9f);
     [SerializeField] private float vrCanvasScale = 0.0015f;
-
-    private readonly TraitOption[] traitCatalog =
-    {
-        new TraitOption(TraitKind.Damage, "OVERCHARGED ROUNDS", "Weapon Damage +20%", 5),
-        new TraitOption(TraitKind.FireRate, "RAPID CHAMBER", "Fire Rate +15%", 5),
-        new TraitOption(TraitKind.MoveSpeed, "COMBAT STIMS", "Move Speed +10%", 5),
-        new TraitOption(TraitKind.Magnet, "GRAVITY COLLECTOR", "EXP Pull Range +2m", 5),
-        new TraitOption(TraitKind.MaxHealth, "REINFORCED VITALS", "Max HP +20", 4),
-        new TraitOption(TraitKind.Armor, "PLATED SUIT", "Incoming Damage -1.5", 4),
-        new TraitOption(TraitKind.Repair, "AUTO REPAIR GEL", "HP Regen +0.5/sec", 5),
-        new TraitOption(TraitKind.LifeSteal, "SIPHON MATRIX", "Heal +2 HP on kill", 5),
-        new TraitOption(TraitKind.Shield, "PHASE SHIELD", "Block one hit. Recharge improves.", 4)
-    };
 
     private Canvas canvas;
     private GameObject canvasObject;
@@ -82,14 +41,16 @@ public class StargraveRuntimeUI : MonoBehaviour
     private PlayerHealth playerHealth;
     private PlayerShootTest playerShoot;
     private PlayerDummyMove playerMove;
+    private PlayerTraitController playerTraits;
     private GameProgressManager progressManager;
     private EnemyHealth bossHealth;
-    private readonly List<TraitOption> currentTraitChoices = new List<TraitOption>();
-    private readonly Dictionary<TraitKind, int> traitRanks = new Dictionary<TraitKind, int>();
+    private readonly List<TraitChoiceView> currentTraitChoices = new List<TraitChoiceView>();
     private Button[] traitButtons;
+    private Button retryButton;
 
     private bool isStarted;
     private bool isChoosingTrait;
+    private bool isEnded;
     private bool isBound;
     private bool playerMoveWasEnabled;
     private bool playerShootWasEnabled;
@@ -179,6 +140,13 @@ public class StargraveRuntimeUI : MonoBehaviour
 
     private void Update()
     {
+        if (isEnded)
+        {
+            KeepEndMenuInteractive();
+            UpdateDamageOverlay();
+            return;
+        }
+
         EnsureHudVisibleDuringGameplay();
 
         if (progressManager == null)
@@ -225,6 +193,11 @@ public class StargraveRuntimeUI : MonoBehaviour
 
             playerShoot = playerLevel.GetComponent<PlayerShootTest>();
             playerMove = playerLevel.GetComponent<PlayerDummyMove>();
+            playerTraits = playerLevel.GetComponent<PlayerTraitController>();
+            if (playerTraits == null)
+            {
+                playerTraits = playerLevel.gameObject.AddComponent<PlayerTraitController>();
+            }
 
             playerLevel.ExpChanged += HandleExpChanged;
             playerLevel.LevelChanged += HandleLevelChanged;
@@ -236,6 +209,7 @@ public class StargraveRuntimeUI : MonoBehaviour
             HandleExpChanged(playerLevel.Level, playerLevel.CurrentExp, playerLevel.RequiredExp);
             HandleLevelChanged(playerLevel.Level);
             HandleHealthChanged(playerHealth.CurrentHealth, playerHealth.MaxHealth);
+            UpdateTraitInfoText();
             isBound = true;
         }
     }
@@ -259,16 +233,22 @@ public class StargraveRuntimeUI : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        EventSystem eventSystem = FindFirstObjectByType<EventSystem>(FindObjectsInactive.Include);
-        if (eventSystem != null)
+        EventSystem[] systems = FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        if (systems.Length > 0)
         {
-            eventSystem.gameObject.SetActive(true);
-            EnsureInputSystemUiModule(eventSystem.gameObject);
+            for (int i = 0; i < systems.Length; i++)
+            {
+                systems[i].gameObject.SetActive(i == 0);
+            }
+
+            EventSystem.current = systems[0];
+            EnsureInputSystemUiModule(systems[0].gameObject);
             return;
         }
 
         GameObject eventSystemObject = new GameObject("EventSystem");
-        eventSystemObject.AddComponent<EventSystem>();
+        EventSystem createdEventSystem = eventSystemObject.AddComponent<EventSystem>();
+        EventSystem.current = createdEventSystem;
         EnsureInputSystemUiModule(eventSystemObject);
     }
 
@@ -392,7 +372,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         healthFill = CreateAnchoredBar(hudPanel.transform, new Vector2(0f, 1f), new Vector2(28f, -58f), new Vector2(280f, 24f), new Color(0.9f, 0.1f, 0.16f, 1f));
 
         levelText = CreateAnchoredText(hudPanel.transform, "LV 1", 28, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-28f, -24f), new Vector2(260f, 38f));
-        traitInfoText = CreateAnchoredText(hudPanel.transform, "Traits: none", 18, TextAnchor.UpperRight, new Vector2(1f, 1f), new Vector2(-28f, -60f), new Vector2(470f, 76f));
+        traitInfoText = CreateAnchoredText(hudPanel.transform, "능력: 없음", 18, TextAnchor.UpperRight, new Vector2(1f, 1f), new Vector2(-28f, -60f), new Vector2(470f, 76f));
         objectiveText = CreateAnchoredText(hudPanel.transform, "Kills 0 / 10", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(520f, 38f));
 
         bossNameText = CreateAnchoredText(hudPanel.transform, "STARGRAVE CORE", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(560f, 34f));
@@ -408,8 +388,8 @@ public class StargraveRuntimeUI : MonoBehaviour
     private void BuildTraitPanel()
     {
         traitPanel = CreatePanel("TraitPanel", root, new Color(0.02f, 0.05f, 0.09f, 0.93f));
-        CreateText(traitPanel.transform, "SELECT AUGMENT", 44, TextAnchor.MiddleCenter, new Vector2(0f, 210f), new Vector2(780f, 70f));
-        CreateText(traitPanel.transform, "Choose one upgrade. Press 1 / 2 / 3.", 24, TextAnchor.MiddleCenter, new Vector2(0f, 154f), new Vector2(780f, 42f));
+        CreateText(traitPanel.transform, "능력 선택", 44, TextAnchor.MiddleCenter, new Vector2(0f, 210f), new Vector2(780f, 70f));
+        CreateText(traitPanel.transform, "강화 하나를 선택하세요. 1 / 2 / 3 키도 사용할 수 있습니다.", 24, TextAnchor.MiddleCenter, new Vector2(0f, 154f), new Vector2(780f, 42f));
 
         traitButtons = new Button[3];
         traitButtons[0] = CreateButton(traitPanel.transform, "1", new Vector2(-310f, -12f), new Vector2(260f, 210f), () => SelectTrait(0));
@@ -422,7 +402,8 @@ public class StargraveRuntimeUI : MonoBehaviour
         endPanel = CreatePanel("EndPanel", root, new Color(0.03f, 0.02f, 0.02f, 0.9f));
         endTitleText = CreateText(endPanel.transform, "MISSION FAILED", 54, TextAnchor.MiddleCenter, new Vector2(0f, 92f), new Vector2(780f, 86f));
         CreateText(endPanel.transform, "Demo flow endpoint", 24, TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(600f, 42f));
-        CreateButton(endPanel.transform, "QUIT", new Vector2(0f, -92f), new Vector2(240f, 62f), QuitGame);
+        retryButton = CreateButton(endPanel.transform, "RETRY", new Vector2(0f, -78f), new Vector2(280f, 66f), RestartGame);
+        CreateButton(endPanel.transform, "QUIT", new Vector2(0f, -154f), new Vector2(280f, 62f), QuitGame);
     }
 
     private GameObject CreatePanel(string name, Transform parent, Color color)
@@ -673,6 +654,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         Time.timeScale = 1f;
         isStarted = true;
         startMenuControlsWereStored = false;
+        isEnded = false;
         startPanel.SetActive(false);
         hudPanel.SetActive(true);
         traitPanel.SetActive(false);
@@ -685,6 +667,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         Time.timeScale = 0f;
         isChoosingTrait = true;
+        isEnded = false;
         RollTraitChoices();
         traitPanel.SetActive(true);
         SetPlayerControlsEnabled(false);
@@ -748,13 +731,50 @@ public class StargraveRuntimeUI : MonoBehaviour
     private void ShowEnd(string title)
     {
         Time.timeScale = 0f;
+        isEnded = true;
+        isChoosingTrait = false;
         endTitleText.text = title;
         startPanel.SetActive(false);
         hudPanel.SetActive(false);
         traitPanel.SetActive(false);
         endPanel.SetActive(true);
+        endPanel.transform.SetAsLastSibling();
+        SetPlayerControlsEnabled(false);
+        KeepEndMenuInteractive();
+    }
+
+    private void KeepEndMenuInteractive()
+    {
+        Time.timeScale = 0f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+        EnsureEventSystem();
+
+        if (canvas != null)
+        {
+            canvas.enabled = true;
+        }
+
+        if (endPanel != null)
+        {
+            endPanel.SetActive(true);
+            endPanel.transform.SetAsLastSibling();
+        }
+
+        if (playerMove != null)
+        {
+            playerMove.enabled = false;
+        }
+
+        if (playerShoot != null)
+        {
+            playerShoot.enabled = false;
+        }
+
+        if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == null && retryButton != null)
+        {
+            EventSystem.current.SetSelectedGameObject(retryButton.gameObject);
+        }
     }
 
     private void HandleExpChanged(int level, int currentExp, int requiredExp)
@@ -860,51 +880,37 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (traitInfoText == null)
             return;
 
-        if (traitRanks.Count == 0)
-        {
-            traitInfoText.text = "Traits: none";
-            return;
-        }
-
-        traitInfoText.text =
-            $"Traits: DMG {GetTraitRank(TraitKind.Damage)}  ROF {GetTraitRank(TraitKind.FireRate)}  " +
-            $"SPD {GetTraitRank(TraitKind.MoveSpeed)}  MAG {GetTraitRank(TraitKind.Magnet)}\n" +
-            $"HP {GetTraitRank(TraitKind.MaxHealth)}  ARM {GetTraitRank(TraitKind.Armor)}  REG {GetTraitRank(TraitKind.Repair)}  " +
-            $"LSH {GetTraitRank(TraitKind.LifeSteal)}  SHD {GetTraitRank(TraitKind.Shield)}";
+        traitInfoText.text = playerTraits != null ? playerTraits.GetSummary() : "능력: 없음";
     }
 
     private void RollTraitChoices()
     {
         currentTraitChoices.Clear();
 
-        List<TraitOption> pool = new List<TraitOption>();
-
-        for (int i = 0; i < traitCatalog.Length; i++)
+        if (playerTraits == null && playerLevel != null)
         {
-            if (GetTraitRank(traitCatalog[i].Kind) < traitCatalog[i].MaxRank)
-            {
-                pool.Add(traitCatalog[i]);
-            }
+            playerTraits = playerLevel.GetComponent<PlayerTraitController>();
         }
+
+        List<TraitChoiceView> choices = playerTraits != null
+            ? playerTraits.RollChoices()
+            : new List<TraitChoiceView>();
 
         for (int i = 0; i < traitButtons.Length; i++)
         {
-            if (pool.Count == 0)
+            if (i >= choices.Count)
             {
                 traitButtons[i].gameObject.SetActive(false);
                 continue;
             }
 
-            int selectedIndex = Random.Range(0, pool.Count);
-            TraitOption option = pool[selectedIndex];
-            pool.RemoveAt(selectedIndex);
-
-            currentTraitChoices.Add(option);
-            SetTraitButton(i, option);
+            TraitChoiceView choice = choices[i];
+            currentTraitChoices.Add(choice);
+            SetTraitButton(i, choice);
         }
     }
 
-    private void SetTraitButton(int index, TraitOption option)
+    private void SetTraitButton(int index, TraitChoiceView choice)
     {
         if (traitButtons == null || index < 0 || index >= traitButtons.Length)
             return;
@@ -916,54 +922,19 @@ public class StargraveRuntimeUI : MonoBehaviour
         if (buttonText == null)
             return;
 
-        int nextRank = GetTraitRank(option.Kind) + 1;
-        buttonText.text = $"{index + 1}  {option.Title}\n{option.Description}\nRank {nextRank} / {option.MaxRank}";
+        TraitData trait = choice.Trait;
+        string title = trait != null && playerTraits != null ? playerTraits.GetDisplayName(trait) : "알 수 없는 능력";
+        string description = playerTraits != null ? playerTraits.GetChoiceDescription(trait) : string.Empty;
+        int maxLevel = trait != null ? trait.maxLevel : 1;
+        buttonText.text = $"{index + 1}  {title}\n{description}\n등급 {choice.NextLevel} / {maxLevel}";
     }
 
-    private void ApplyTrait(TraitOption option)
+    private void ApplyTrait(TraitChoiceView choice)
     {
-        IncrementTraitRank(option.Kind);
-
-        switch (option.Kind)
+        if (playerTraits != null)
         {
-            case TraitKind.Damage:
-                if (playerShoot != null) playerShoot.AddDamageMultiplier(1.2f);
-                break;
-            case TraitKind.FireRate:
-                if (playerShoot != null) playerShoot.AddAttackSpeedMultiplier(1.15f);
-                break;
-            case TraitKind.MoveSpeed:
-                if (playerMove != null) playerMove.AddMoveSpeedMultiplier(1.1f);
-                break;
-            case TraitKind.Magnet:
-                ExpOrb.AddGlobalAttractBonus(2f);
-                break;
-            case TraitKind.MaxHealth:
-                if (playerHealth != null) playerHealth.AddMaxHealth(20f);
-                break;
-            case TraitKind.Armor:
-                if (playerHealth != null) playerHealth.AddFlatDamageReduction(1.5f);
-                break;
-            case TraitKind.Repair:
-                if (playerHealth != null) playerHealth.AddHealthRegen(0.5f);
-                break;
-            case TraitKind.LifeSteal:
-                if (playerHealth != null) playerHealth.AddHealOnKill(2f);
-                break;
-            case TraitKind.Shield:
-                if (playerHealth != null) playerHealth.ImproveRechargeShield(18f, 3f);
-                break;
+            playerTraits.ApplyTrait(choice.Trait);
         }
-    }
-
-    private int GetTraitRank(TraitKind kind)
-    {
-        return traitRanks.TryGetValue(kind, out int rank) ? rank : 0;
-    }
-
-    private void IncrementTraitRank(TraitKind kind)
-    {
-        traitRanks[kind] = GetTraitRank(kind) + 1;
     }
 
     private void HandleHealthChanged(float current, float max)
@@ -1019,5 +990,23 @@ public class StargraveRuntimeUI : MonoBehaviour
     private void QuitGame()
     {
         Application.Quit();
+    }
+
+    private void RestartGame()
+    {
+        Time.timeScale = 1f;
+        isEnded = false;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (activeScene.buildIndex >= 0)
+        {
+            SceneManager.LoadScene(activeScene.buildIndex);
+        }
+        else
+        {
+            SceneManager.LoadScene(activeScene.name);
+        }
     }
 }

@@ -215,13 +215,13 @@ public class PlayerDummyMove : MonoBehaviour
             return false;
 
         if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
-            return true;
+            return false;
 
         if (hitObject.CompareTag("Ground"))
-            return true;
+            return hit.normal.y > 0.45f;
 
         string objectName = hitObject.name;
-        return objectName.Contains("Ground") || objectName.Contains("Floor");
+        return (objectName.Contains("Ground") || objectName.Contains("Floor")) && hit.normal.y > 0.45f;
     }
 
     private void GetCapsuleWorldPoints(out Vector3 point1, out Vector3 point2, out float radius)

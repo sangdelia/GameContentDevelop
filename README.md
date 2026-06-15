@@ -1,24 +1,30 @@
-# GameContentDevelop
+# STARGRAVE SURVIVOR
 
-게임콘텐츠개발 과목 프로젝트 문서 저장소입니다.
+Unity 기반의 SF 생존 액션 프로젝트입니다. PC 테스트 조작을 기본으로 두고, Meta Quest 2 VR 모드 확장을 고려한 구조로 구성되어 있습니다.
 
-현재 프로젝트 주제는 VR 싱글 플레이 SF 서바이벌 슈터입니다.
+## 핵심 플레이
 
-## Project
+- 플레이어는 아레나에서 몰려오는 적을 처치하고 경험치 오브를 획득합니다.
+- 레벨업 시 3개의 특성 중 하나를 선택해 빌드를 강화합니다.
+- 일정 처치 수를 달성하면 보스 포털이 열리고, 보스 아레나로 이동합니다.
+- 보스전은 근접 공격, 레이저, 화염 방사 패턴을 피하며 클리어하는 흐름입니다.
 
-- 프로젝트명: `STARGRAVE SURVIVOR`
-- 장르: VR 싱글 플레이 서바이벌 슈터
-- 핵심 루프: 조준 사격 -> 적 처치 -> 경험치 회수 -> 레벨업 선택 -> 빌드 확장 -> 생존
+## 주요 문서
 
-## Docs
+- [프로젝트 상세 설명](docs/PROJECT_OVERVIEW.md)
+- [특성 시스템 상세 설명](docs/TRAIT_SYSTEM.md)
+- [게임 기획 문서](docs/GAME_SPEC.md)
+- [진행/성장 시스템 문서](docs/PROGRESSION_SPEC.md)
+- [VR 조작 명세](docs/VR_CONTROL_SPEC.md)
 
-- `docs/PROJECT_PROPOSAL.md`: 제출용 프로젝트 의견서
-- `docs/GAME_CONCEPT.md`: 게임 컨셉과 플레이 경험 목표
-- `docs/GAME_SPEC.md`: 전체 게임 명세
-- `docs/VR_CONTROL_SPEC.md`: VR 조작 체계 명세
-- `docs/PROGRESSION_SPEC.md`: 레벨업, 영구 강화, 조합 시스템 명세
-- `docs/UI_UX_SPEC.md`: VR UI와 정보 전달 명세
-- `docs/MVP_SCOPE.md`: 최소 구현 범위
-- `docs/TECH_ART_PLAN.md`: 기술 스택, 에셋, 연출 방향
-- `docs/DEV_ROADMAP.md`: 개발 순서와 일정
-- `docs/CONTENT_PLAN.md`: 적, 무기 속성, 스킬 후보 목록
+## 주요 코드 위치
+
+- 플레이어 조작/사격: `Assets/Scripts/Player`
+- 적 AI/체력/비주얼: `Assets/Scripts/Enemy`
+- 특성/상태이상: `Assets/Scripts/Traits`
+- 진행도/보스전: `Assets/Scripts/Progress`
+- 런타임 UI: `Assets/Scripts/UI`
+
+## 현재 상태
+
+프로젝트는 런타임 생성 UI와 런타임 생성 보스 아레나를 사용합니다. Unity 에디터에서 씬을 실행하면 PC 테스트 모드로 플레이할 수 있으며, 런타임 UI에서 PC/VR 모드 선택, 레벨업 특성 선택, 게임오버/클리어 후 재시작을 처리합니다.

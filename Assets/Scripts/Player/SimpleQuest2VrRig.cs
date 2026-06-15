@@ -35,6 +35,11 @@ public class SimpleQuest2VrRig : MonoBehaviour
     public Camera XrCamera => xrCamera;
     public Transform RightController => rightController != null ? rightController : xrCamera != null ? xrCamera.transform : transform;
 
+    public void AddMoveSpeedMultiplier(float multiplier)
+    {
+        moveSpeed *= multiplier;
+    }
+
     public void Configure(Transform root, Camera camera, Transform leftHand, Transform rightHand)
     {
         locomotionRoot = root;
@@ -441,14 +446,14 @@ public class SimpleQuest2VrRig : MonoBehaviour
             return false;
 
         if (hit.collider.GetComponentInParent<EnemyHealth>() != null)
-            return true;
+            return false;
 
         GameObject hitObject = hit.collider.gameObject;
         if (hitObject.CompareTag("Ground"))
-            return true;
+            return hit.normal.y > 0.45f;
 
         string objectName = hitObject.name;
-        return objectName.Contains("Ground") || objectName.Contains("Floor");
+        return (objectName.Contains("Ground") || objectName.Contains("Floor")) && hit.normal.y > 0.45f;
     }
 
     private void GetCapsuleWorldPoints(out Vector3 point1, out Vector3 point2, out float radius)

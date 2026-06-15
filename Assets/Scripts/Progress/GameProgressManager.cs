@@ -12,8 +12,11 @@ public class GameProgressManager : MonoBehaviour
     [SerializeField] private Vector3 bossArenaCenter = new Vector3(0f, 0f, 500f);
     [SerializeField] private Vector3 bossPlayerSpawnPosition = new Vector3(0f, 1f, 488f);
     [SerializeField] private Vector3 bossSpawnPosition = new Vector3(0f, 0f, 508f);
-    [SerializeField] private float bossArenaSize = 46f;
+    [SerializeField] private float bossArenaSize = 70f;
     [SerializeField] private float bossHp = 5000f;
+    [SerializeField] private float bossArenaSpawnGroundProbeHeight = 12f;
+    [SerializeField] private float bossArenaSpawnGroundProbeDistance = 28f;
+    [SerializeField] private float bossArenaPlayerGroundClearance = 0.04f;
 
     private int killCount;
     private bool portalOpened;
@@ -215,6 +218,8 @@ public class GameProgressManager : MonoBehaviour
         {
             cameraFollow.SnapToTarget();
         }
+
+        Physics.SyncTransforms();
     }
 
     private Vector3 GetSafeBossPlayerSpawnPosition()
@@ -232,29 +237,31 @@ public class GameProgressManager : MonoBehaviour
 
         for (int i = 0; i < offsets.Length; i++)
         {
-            Vector3 candidate = bossPlayerSpawnPosition + offsets[i];
+            Vector3 candidate = GetGroundedBossPlayerSpawnPosition(bossPlayerSpawnPosition + offsets[i]);
             if (!IsBossPlayerSpawnBlocked(candidate))
             {
                 return candidate;
             }
         }
 
-        return bossPlayerSpawnPosition + Vector3.forward * 3f;
+        return GetGroundedBossPlayerSpawnPosition(bossPlayerSpawnPosition + Vector3.forward * 3f);
     }
 
     private bool IsBossPlayerSpawnBlocked(Vector3 position)
     {
         float radius = 0.55f;
         float height = 1.9f;
+        Vector3 scaledCenter = Vector3.zero;
 
         CapsuleCollider playerCollider = player != null ? player.GetComponent<CapsuleCollider>() : null;
         if (playerCollider != null)
         {
             radius = Mathf.Max(0.25f, playerCollider.radius * Mathf.Max(player.lossyScale.x, player.lossyScale.z));
             height = Mathf.Max(radius * 2f + 0.1f, playerCollider.height * player.lossyScale.y);
+            scaledCenter = Vector3.Scale(playerCollider.center, player.lossyScale);
         }
 
-        Vector3 center = position + Vector3.up * (height * 0.5f);
+        Vector3 center = position + scaledCenter;
         float halfLine = Mathf.Max(0f, height * 0.5f - radius);
         Vector3 point1 = center + Vector3.up * halfLine;
         Vector3 point2 = center - Vector3.up * halfLine;
@@ -271,6 +278,54 @@ public class GameProgressManager : MonoBehaviour
         }
 
         return false;
+    }
+
+    private Vector3 GetGroundedBossPlayerSpawnPosition(Vector3 desiredPosition)
+    {
+        float groundY = GetBossArenaGroundY(desiredPosition);
+        float height = 1.9f;
+        float centerOffsetY = 0f;
+
+        CapsuleCollider playerCollider = player != null ? player.GetComponent<CapsuleCollider>() : null;
+        if (playerCollider != null)
+        {
+            height = Mathf.Max(playerCollider.radius * 2f + 0.1f, playerCollider.height) * player.lossyScale.y;
+            centerOffsetY = playerCollider.center.y * player.lossyScale.y;
+        }
+
+        desiredPosition.y = groundY + height * 0.5f - centerOffsetY + bossArenaPlayerGroundClearance;
+        return desiredPosition;
+    }
+
+    private float GetBossArenaGroundY(Vector3 referencePosition)
+    {
+        Vector3 rayOrigin = referencePosition + Vector3.up * bossArenaSpawnGroundProbeHeight;
+        RaycastHit[] hits = Physics.RaycastAll(rayOrigin, Vector3.down, bossArenaSpawnGroundProbeDistance, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i].collider;
+            if (hit == null)
+                continue;
+
+            if (player != null && hit.transform.IsChildOf(player))
+                continue;
+
+            if (hit.GetComponentInParent<PlayerHealth>() != null)
+                continue;
+
+            if (hit.GetComponentInParent<EnemyHealth>() != null)
+                continue;
+
+            string objectName = hit.name;
+            if (hit.CompareTag("Ground") || objectName.Contains("Ground") || objectName.Contains("Floor") || objectName.Contains("ArenaFloor"))
+            {
+                return hits[i].point.y;
+            }
+        }
+
+        return bossArenaCenter.y;
     }
 
     private bool ShouldIgnoreBossSpawnBlocker(Collider hit)

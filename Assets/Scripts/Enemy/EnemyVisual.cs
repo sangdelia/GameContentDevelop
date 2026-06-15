@@ -852,8 +852,14 @@ public class EnemyVisual : MonoBehaviour
             float visualHeight = Mathf.Max(0.8f, bounds.size.y);
             float visualRadius = Mathf.Max(bounds.extents.x, bounds.extents.z);
 
+            if (visualType == EnemyVisualType.Flying)
+            {
+                visualHeight = Mathf.Max(visualHeight * 1.35f, 1.15f);
+                visualRadius = Mathf.Max(visualRadius * 1.32f, 0.85f);
+            }
+
             capsule.height = Mathf.Max(visualHeight, visualRadius * 2f + 0.1f);
-            capsule.radius = Mathf.Clamp(visualRadius * 0.78f, 0.5f, 2.3f);
+            capsule.radius = Mathf.Clamp(visualRadius * 0.78f, visualType == EnemyVisualType.Flying ? 0.72f : 0.5f, 2.3f);
             capsule.center = new Vector3(bounds.center.x, originalBottom + capsule.height * 0.5f, bounds.center.z);
             return;
         }

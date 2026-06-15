@@ -23,6 +23,7 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private int enemiesPerSpawnTick = 3;
     [SerializeField] private float minSpawnDistance = 18f;
     [SerializeField] private float maxSpawnDistance = 28f;
+    [SerializeField] private float playerSafeSpawnRadius = 14f;
     [SerializeField] private int maxEnemies = 30;
 
     [Header("Difficulty Ramp")]
@@ -111,6 +112,7 @@ public class EnemySpawner : MonoBehaviour
         enemiesPerSpawnTick = Mathf.Max(1, enemiesPerSpawnTick);
         minSpawnDistance = Mathf.Max(1f, minSpawnDistance);
         maxSpawnDistance = Mathf.Max(minSpawnDistance + 1f, maxSpawnDistance);
+        playerSafeSpawnRadius = Mathf.Max(0f, playerSafeSpawnRadius);
         maxEnemies = Mathf.Max(1, maxEnemies);
         frontAngle = Mathf.Clamp(frontAngle, 1f, 180f);
         backAngle = Mathf.Clamp(backAngle, 1f, 180f);
@@ -206,6 +208,8 @@ public class EnemySpawner : MonoBehaviour
 
     private void SetupSpawnedEnemy(GameObject enemy)
     {
+        EnsureEnemyPhysics(enemy);
+
         float typeRoll = Random.value;
         bool makeFlyingRanged = typeRoll < flyingRangedEnemyChance;
         bool makeRanged = !makeFlyingRanged && typeRoll < flyingRangedEnemyChance + rangedEnemyChance;
@@ -246,6 +250,7 @@ public class EnemySpawner : MonoBehaviour
             ApplyEnemyColor(enemy, new Color(0.1f, 0.85f, 1f));
             enemy.transform.localScale = Vector3.one * 1.42f;
             EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Ranged);
+            SnapGroundEnemyToGround(enemy);
             return;
         }
 
@@ -261,6 +266,7 @@ public class EnemySpawner : MonoBehaviour
         enemy.name = "Enemy_Melee_Chaser";
         enemy.transform.localScale = Vector3.one * 1.45f;
         EnemyVisual.Attach(enemy, EnemyVisual.EnemyVisualType.Melee);
+        SnapGroundEnemyToGround(enemy);
     }
 
     private void ConfigureHealth(GameObject enemy, float baseHp)
@@ -271,6 +277,79 @@ public class EnemySpawner : MonoBehaviour
             return;
 
         health.SetMaxHp(baseHp * GetCurrentEnemyHpMultiplier());
+    }
+
+    private void EnsureEnemyPhysics(GameObject enemy)
+    {
+        CapsuleCollider capsule = enemy.GetComponent<CapsuleCollider>();
+        if (capsule == null)
+        {
+            capsule = enemy.AddComponent<CapsuleCollider>();
+        }
+
+        capsule.isTrigger = false;
+        capsule.center = new Vector3(0f, 1f, 0f);
+        capsule.height = Mathf.Max(capsule.height, 2f);
+        capsule.radius = Mathf.Max(capsule.radius, 0.55f);
+
+        Rigidbody body = enemy.GetComponent<Rigidbody>();
+        if (body != null)
+        {
+            Destroy(body);
+        }
+    }
+
+    private void SnapGroundEnemyToGround(GameObject enemy)
+    {
+        if (enemy == null)
+            return;
+
+        if (!TryGetGroundY(enemy.transform.position, enemy, out float groundY))
+            return;
+
+        float bottomY = GetEnemyColliderBottomY(enemy);
+        enemy.transform.position += Vector3.up * (groundY - bottomY);
+    }
+
+    private bool TryGetGroundY(Vector3 referencePosition, GameObject enemy, out float groundY)
+    {
+        groundY = referencePosition.y;
+        Vector3 rayOrigin = referencePosition + Vector3.up * rayStartHeight;
+        int mask = groundLayer.value != 0 ? groundLayer.value : ~0;
+        RaycastHit[] hits = Physics.RaycastAll(rayOrigin, Vector3.down, rayDistance, mask, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i].collider;
+            if (hit == null)
+                continue;
+
+            if (enemy != null && hit.transform.IsChildOf(enemy.transform))
+                continue;
+
+            if (hit.GetComponentInParent<PlayerLevel>() != null)
+                continue;
+
+            if (hit.GetComponentInParent<EnemyHealth>() != null)
+                continue;
+
+            groundY = hits[i].point.y;
+            return true;
+        }
+
+        return false;
+    }
+
+    private float GetEnemyColliderBottomY(GameObject enemy)
+    {
+        Collider collider = enemy.GetComponent<Collider>();
+        if (collider != null)
+        {
+            return collider.bounds.min.y;
+        }
+
+        return enemy.transform.position.y;
     }
 
     private void ApplyEnemyColor(GameObject enemy, Color color)
@@ -343,6 +422,16 @@ public class EnemySpawner : MonoBehaviour
 
     private bool IsSpawnBlocked(Vector3 spawnPosition)
     {
+        if (IsInsidePlayerSafeSpawnRadius(spawnPosition))
+        {
+            if (showDebugLog)
+            {
+                Debug.Log("Enemy spawn blocked by player safe radius.");
+            }
+
+            return true;
+        }
+
         Vector3 checkCenter = spawnPosition + Vector3.up * obstacleCheckHeight;
         Collider[] hits = Physics.OverlapSphere(checkCenter, obstacleCheckRadius, obstacleLayer, QueryTriggerInteraction.Ignore);
 
@@ -362,6 +451,16 @@ public class EnemySpawner : MonoBehaviour
         }
 
         return false;
+    }
+
+    private bool IsInsidePlayerSafeSpawnRadius(Vector3 spawnPosition)
+    {
+        if (player == null || playerSafeSpawnRadius <= 0f)
+            return false;
+
+        Vector3 toSpawn = spawnPosition - player.position;
+        toSpawn.y = 0f;
+        return toSpawn.sqrMagnitude < playerSafeSpawnRadius * playerSafeSpawnRadius;
     }
 
     private bool ShouldIgnoreSpawnBlocker(Collider hit)

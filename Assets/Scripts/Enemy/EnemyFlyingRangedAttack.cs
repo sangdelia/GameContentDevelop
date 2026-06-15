@@ -15,6 +15,7 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
 
     private Transform player;
     private EnemyVisual visual;
+    private StatusEffectController statusEffects;
     private float attackTimer;
     private float bobSeed;
     private bool chargeStarted;
@@ -34,6 +35,7 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
         attackTimer = Random.Range(0.25f, attackInterval);
         bobSeed = Random.Range(0f, 100f);
         visual = GetComponent<EnemyVisual>();
+        statusEffects = GetComponent<StatusEffectController>();
     }
 
     private void Update()
@@ -46,7 +48,7 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
 
         if (flatToPlayer.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.LookRotation(flatToPlayer.normalized);
+            transform.rotation = Quaternion.LookRotation(flatToPlayer.normalized, Vector3.up);
         }
 
         Move(flatToPlayer.magnitude);
@@ -69,7 +71,13 @@ public class EnemyFlyingRangedAttack : MonoBehaviour
         }
 
         desiredPosition.y += Mathf.Sin(Time.time * hoverBobSpeed + bobSeed) * hoverBobAmount;
-        transform.position = Vector3.MoveTowards(transform.position, desiredPosition, moveSpeed * Time.deltaTime);
+        if (statusEffects == null)
+        {
+            statusEffects = GetComponent<StatusEffectController>();
+        }
+
+        float speedMultiplier = statusEffects != null ? statusEffects.MoveSpeedMultiplier : 1f;
+        transform.position = Vector3.MoveTowards(transform.position, desiredPosition, moveSpeed * speedMultiplier * Time.deltaTime);
     }
 
     private void TryShoot()
