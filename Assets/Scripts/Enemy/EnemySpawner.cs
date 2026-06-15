@@ -53,10 +53,11 @@ public class EnemySpawner : MonoBehaviour
 
     [Header("View Based Spawn")]
     [Range(0f, 1f)]
-    [SerializeField] private float frontSpawnChance = 0.85f;
+    [SerializeField] private float frontSpawnChance = 0.9f;
 
     [SerializeField] private float frontAngle = 180f;
     [SerializeField] private float backAngle = 180f;
+    [SerializeField] private float frontCenterSafeAngle = 24f;
 
     [Header("Ground Check")]
     [SerializeField] private LayerMask groundLayer;
@@ -284,7 +285,11 @@ public class EnemySpawner : MonoBehaviour
 
         if (isFront)
         {
-            usedAngle = Random.Range(-frontAngle * 0.5f, frontAngle * 0.5f);
+            float halfFront = frontAngle * 0.5f;
+            float halfSafe = Mathf.Min(frontCenterSafeAngle * 0.5f, halfFront - 1f);
+            usedAngle = Random.value < 0.5f
+                ? Random.Range(-halfFront, -halfSafe)
+                : Random.Range(halfSafe, halfFront);
         }
         else
         {
