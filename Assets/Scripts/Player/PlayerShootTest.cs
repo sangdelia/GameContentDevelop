@@ -1,11 +1,13 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 
 public class PlayerShootTest : MonoBehaviour
 {
     [Header("Camera")]
     [SerializeField] private Camera playerCamera;
+    [SerializeField] private Transform xrAimSource;
 
     [Header("Shoot")]
     [SerializeField] private float damage = 12f;
@@ -13,6 +15,9 @@ public class PlayerShootTest : MonoBehaviour
     [SerializeField] private float shotsPerSecond = 4.5f;
     [SerializeField] private bool automaticFire = true;
     [SerializeField] private bool logShotDebug = false;
+    [SerializeField] private bool allowMouseInput = true;
+    [SerializeField] private bool allowVrInput = false;
+    [SerializeField] private float vrTriggerThreshold = 0.55f;
 
     [Header("Ray Visual")]
     [SerializeField] private float rayVisibleTime = 0.05f;
@@ -33,6 +38,7 @@ public class PlayerShootTest : MonoBehaviour
     private Transform muzzlePoint;
     private CameraFollowTarget cameraFollow;
     private float nextShootTime;
+    private bool wasVrTriggerPressed;
 
     public float Damage => damage;
 
@@ -60,20 +66,71 @@ public class PlayerShootTest : MonoBehaviour
 
     private void Update()
     {
-        Mouse mouse = Mouse.current;
-
-        if (mouse == null)
-            return;
-
-        bool wantsToShoot = automaticFire
-            ? mouse.leftButton.isPressed
-            : mouse.leftButton.wasPressedThisFrame;
+        bool wantsToShoot = WantsMouseShoot() || WantsVrShoot();
 
         if (wantsToShoot && Time.time >= nextShootTime)
         {
             nextShootTime = Time.time + 1f / Mathf.Max(0.1f, shotsPerSecond);
             Shoot();
         }
+    }
+
+    public void SetRuntimeMode(StargravePlayMode.Mode mode, Camera activeCamera, Transform aimSource)
+    {
+        allowVrInput = mode == StargravePlayMode.Mode.VrQuest2;
+        allowMouseInput = mode == StargravePlayMode.Mode.Pc;
+
+        if (activeCamera != null)
+        {
+            playerCamera = activeCamera;
+            cameraFollow = playerCamera.GetComponent<CameraFollowTarget>();
+        }
+
+        xrAimSource = aimSource;
+    }
+
+    private bool WantsMouseShoot()
+    {
+        if (!allowMouseInput)
+            return false;
+
+        Mouse mouse = Mouse.current;
+        if (mouse == null)
+            return false;
+
+        return automaticFire
+            ? mouse.leftButton.isPressed
+            : mouse.leftButton.wasPressedThisFrame;
+    }
+
+    private bool WantsVrShoot()
+    {
+        if (!allowVrInput)
+            return false;
+
+        InputDevice rightController = InputSystem.GetDevice("<XRController>{RightHand}");
+        if (rightController == null)
+        {
+            wasVrTriggerPressed = false;
+            return false;
+        }
+
+        bool isPressed = false;
+        ButtonControl triggerPressed = rightController.TryGetChildControl<ButtonControl>("triggerPressed");
+        if (triggerPressed != null)
+        {
+            isPressed = triggerPressed.isPressed;
+        }
+        else
+        {
+            AxisControl trigger = rightController.TryGetChildControl<AxisControl>("trigger");
+            isPressed = trigger != null && trigger.ReadValue() >= vrTriggerThreshold;
+        }
+
+        bool startedThisFrame = isPressed && !wasVrTriggerPressed;
+        wasVrTriggerPressed = isPressed;
+
+        return automaticFire ? isPressed : startedThisFrame;
     }
 
     private void CreateLineRenderer()
@@ -106,7 +163,7 @@ public class PlayerShootTest : MonoBehaviour
 
         GameAudio.PlayPlayerShoot(transform.position);
 
-        Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        Ray ray = GetShootRay();
 
         Vector3 start = muzzlePoint != null ? muzzlePoint.position : ray.origin;
         Vector3 end = ray.origin + ray.direction * range;
@@ -150,6 +207,16 @@ public class PlayerShootTest : MonoBehaviour
         }
 
         ShowRay(start, end);
+    }
+
+    private Ray GetShootRay()
+    {
+        if (allowVrInput && xrAimSource != null)
+        {
+            return new Ray(xrAimSource.position, xrAimSource.forward);
+        }
+
+        return playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
     }
 
     private bool TryGetShotHit(Ray ray, out RaycastHit selectedHit)

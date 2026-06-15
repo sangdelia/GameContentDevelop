@@ -38,7 +38,10 @@ public class StargraveRuntimeUI : MonoBehaviour
 
     [Header("PC Test Layout")]
     [SerializeField] private bool useStartScreen = true;
+    [SerializeField] private bool autoStartOnBuildPlatform = true;
     [SerializeField] private Vector2 canvasSize = new Vector2(1200f, 700f);
+    [SerializeField] private Vector3 vrCanvasLocalPosition = new Vector3(0f, -0.08f, 1.9f);
+    [SerializeField] private float vrCanvasScale = 0.0015f;
 
     private readonly TraitOption[] traitCatalog =
     {
@@ -54,6 +57,7 @@ public class StargraveRuntimeUI : MonoBehaviour
     };
 
     private Canvas canvas;
+    private GameObject canvasObject;
     private RectTransform root;
     private Font font;
 
@@ -107,6 +111,7 @@ public class StargraveRuntimeUI : MonoBehaviour
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         EnsureEventSystem();
         BuildCanvas();
+        ApplyPlatformMode(StargravePlayMode.Current, Camera.main);
         BuildStartPanel();
         BuildHudPanel();
         BuildTraitPanel();
@@ -125,6 +130,12 @@ public class StargraveRuntimeUI : MonoBehaviour
     private void Start()
     {
         BindPlayer();
+
+        if (autoStartOnBuildPlatform && useStartScreen && ShouldAutoStartForCurrentPlayer())
+        {
+            StartGame(GetBuildDefaultMode());
+            return;
+        }
 
         if (!useStartScreen)
         {
@@ -246,7 +257,7 @@ public class StargraveRuntimeUI : MonoBehaviour
 
     private void BuildCanvas()
     {
-        GameObject canvasObject = new GameObject("PcTestCanvas");
+        canvasObject = new GameObject("StargraveRuntimeCanvas");
         canvasObject.transform.SetParent(transform);
 
         canvas = canvasObject.AddComponent<Canvas>();
@@ -263,6 +274,46 @@ public class StargraveRuntimeUI : MonoBehaviour
         root = canvas.GetComponent<RectTransform>();
         root.anchorMin = Vector2.zero;
         root.anchorMax = Vector2.one;
+        root.offsetMin = Vector2.zero;
+        root.offsetMax = Vector2.zero;
+        root.sizeDelta = Vector2.zero;
+    }
+
+    public void ApplyPlatformMode(StargravePlayMode.Mode mode, Camera activeCamera)
+    {
+        if (canvas == null || canvasObject == null)
+            return;
+
+        if (mode == StargravePlayMode.Mode.VrQuest2)
+        {
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = activeCamera;
+            canvasObject.name = "VrWorldSpaceCanvas";
+
+            Transform parent = activeCamera != null ? activeCamera.transform : transform;
+            canvasObject.transform.SetParent(parent, false);
+            canvasObject.transform.localPosition = vrCanvasLocalPosition;
+            canvasObject.transform.localRotation = Quaternion.identity;
+            canvasObject.transform.localScale = Vector3.one * vrCanvasScale;
+
+            root.anchorMin = new Vector2(0.5f, 0.5f);
+            root.anchorMax = new Vector2(0.5f, 0.5f);
+            root.pivot = new Vector2(0.5f, 0.5f);
+            root.sizeDelta = canvasSize;
+            return;
+        }
+
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.worldCamera = null;
+        canvasObject.name = "PcScreenCanvas";
+        canvasObject.transform.SetParent(transform, false);
+        canvasObject.transform.localPosition = Vector3.zero;
+        canvasObject.transform.localRotation = Quaternion.identity;
+        canvasObject.transform.localScale = Vector3.one;
+
+        root.anchorMin = Vector2.zero;
+        root.anchorMax = Vector2.one;
+        root.pivot = new Vector2(0.5f, 0.5f);
         root.offsetMin = Vector2.zero;
         root.offsetMax = Vector2.zero;
         root.sizeDelta = Vector2.zero;
@@ -505,8 +556,29 @@ public class StargraveRuntimeUI : MonoBehaviour
     {
         StargravePlayMode.SetMode(mode);
         BindPlayer();
+        ApplyPlatformMode(mode, Camera.main);
         ApplySelectedPlayMode();
         ShowGameplay();
+    }
+
+    private StargravePlayMode.Mode GetBuildDefaultMode()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        return StargravePlayMode.Mode.VrQuest2;
+#elif UNITY_STANDALONE && !UNITY_EDITOR
+        return StargravePlayMode.Mode.Pc;
+#else
+        return StargravePlayMode.Current;
+#endif
+    }
+
+    private bool ShouldAutoStartForCurrentPlayer()
+    {
+#if !UNITY_EDITOR
+        return true;
+#else
+        return false;
+#endif
     }
 
     private void ApplySelectedPlayMode()
